@@ -1,0 +1,9 @@
+import type { Game } from "./types";
+const DB_NAME="bingo-local", STORE="games", VERSION=1;
+function openDb(): Promise<IDBDatabase> { return new Promise((resolve,reject)=>{ const req=indexedDB.open(DB_NAME,VERSION); req.onupgradeneeded=()=>{const db=req.result;if(!db.objectStoreNames.contains(STORE)){const s=db.createObjectStore(STORE,{keyPath:"id"});s.createIndex("updatedAt","updatedAt");}}; req.onsuccess=()=>resolve(req.result); req.onerror=()=>reject(req.error); }); }
+export async function saveGame(game: Game) { const db=await openDb(); await new Promise<void>((resolve,reject)=>{const tx=db.transaction(STORE,"readwrite");tx.objectStore(STORE).put(structuredClone(game));tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);}); db.close(); localStorage.setItem("bingo:lastGameId",game.id); }
+export async function getGame(id:string):Promise<Game|undefined>{const db=await openDb();const value=await new Promise<Game|undefined>((resolve,reject)=>{const r=db.transaction(STORE).objectStore(STORE).get(id);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});db.close();return value;}
+export async function getLastGame(){const id=localStorage.getItem("bingo:lastGameId");if(id){const game=await getGame(id);if(game)return game;}const games=await listGames();return games[0];}
+export async function listGames():Promise<Game[]>{const db=await openDb();const values=await new Promise<Game[]>((resolve,reject)=>{const r=db.transaction(STORE).objectStore(STORE).getAll();r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});db.close();return values.sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));}
+export function serializeGame(game:Game){return JSON.stringify({version:1,game});}
+export function deserializeGame(value:string):Game{const parsed=JSON.parse(value);if(parsed.version!==1||!parsed.game?.id)throw new Error("Formato de partida incompatible");return parsed.game;}
