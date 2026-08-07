@@ -20,6 +20,7 @@ const rawFixture = [
 [[5,23,41,59,73],[14,17,37,56,71],[15,28,null,50,74],[3,24,42,52,64],[8,19,36,58,67]]
 ] as Cell[][][];
 export function fixtureGame(): Game { const id = crypto.randomUUID(); const now = new Date().toISOString(); return {id,name:"Tabla 214",createdAt:now,updatedAt:now,status:"active",calledNumbers:[],history:[],cards:rawFixture.map((rows,i)=>({id:crypto.randomUUID(),gameId:id,label:`Cartón ${i+1}`,rows}))}; }
+export function table214Game(): Game { const id="tabla-214", now=new Date().toISOString(); return {id,name:"Tabla 214",createdAt:now,updatedAt:now,status:"active",calledNumbers:[],history:[],cards:rawFixture.map((rows,i)=>({id:`tabla-214-carton-${i+1}`,gameId:id,label:`Cartón ${i+1}`,rows}))}; }
 const table197Rows = [
 [[6,23,34,59,70],[2,26,43,49,74],[3,27,null,57,67],[13,22,40,52,68],[7,24,38,46,71]],
 [[8,26,42,53,61],[3,19,45,56,72],[15,25,null,57,69],[12,17,40,50,71],[6,28,43,49,64]],

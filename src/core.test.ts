@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cardIssues, completedRows, fixtureGame, isFullCard, normalizeParsedCard, resetMarks, table197Game, toggleNumber, undoLast } from "./core";
+import { cardIssues, completedRows, fixtureGame, isFullCard, normalizeParsedCard, resetMarks, table197Game, table214Game, toggleNumber, undoLast } from "./core";
 import { deserializeGame, serializeGame } from "./db";
 
 describe("reglas de Bingo",()=>{
@@ -8,6 +8,7 @@ describe("reglas de Bingo",()=>{
 });
 describe("estado global",()=>{
  it("incluye completos los cuatro cartones de la Tabla 197",()=>{const game=table197Game();expect(game.cards).toHaveLength(4);expect(game.cards.every(card=>cardIssues(card.rows).length===0)).toBe(true);expect(game.cards[0].rows[0]).toEqual([6,23,34,59,70]);expect(game.cards[3].rows[4]).toEqual([11,25,45,54,75])});
+ it("incluye completos los cuatro cartones de la Tabla 214",()=>{const game=table214Game();expect(game.cards).toHaveLength(4);expect(game.cards.every(card=>cardIssues(card.rows).length===0)).toBe(true);expect(game.cards[0].rows[0]).toEqual([10,21,45,60,69]);expect(game.cards[3].rows[4]).toEqual([8,19,36,58,67])});
  it("marca y desmarca todas las ocurrencias del 5",()=>{let game=toggleNumber(fixtureGame(),5);expect(game.calledNumbers).toEqual([5]);expect(game.cards.filter(c=>c.rows.flat().includes(5))).toHaveLength(3);game=toggleNumber(game,5);expect(game.calledNumbers).toEqual([])});
  it("deshace el último número",()=>{let game=toggleNumber(toggleNumber(fixtureGame(),5),14);game=undoLast(game);expect(game.calledNumbers).toEqual([5]);expect(game.history).toEqual([5])});
  it("reinicia marcas conservando cartones",()=>{const game=resetMarks(toggleNumber(fixtureGame(),5));expect(game.calledNumbers).toEqual([]);expect(game.cards).toHaveLength(4)});

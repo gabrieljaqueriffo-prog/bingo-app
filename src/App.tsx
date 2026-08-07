@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Camera, Check, ChevronRight, CircleHelp, Clock3, FileImage, Grid3X3, History, ImagePlus, MoreHorizontal, Plus, RotateCcw, Share2, Trophy, Undo2, X } from "lucide-react";
 import { BrowserCardImageParser } from "./ocr";
-import { cardIssues, completedRows, createGame, emptyRows, fixtureGame, isFullCard, markedCount, nearestLine, resetMarks, table197Game, toggleNumber, undoLast } from "./core";
+import { cardIssues, completedRows, createGame, emptyRows, fixtureGame, isFullCard, markedCount, nearestLine, resetMarks, table197Game, table214Game, toggleNumber, undoLast } from "./core";
 import { getGame, getLastGame, listGames, saveGame } from "./db";
 import type { Card, Cell, Game, ParsedCard } from "./types";
 
@@ -12,7 +12,7 @@ const makeCard=(gameId:string,rows:Cell[][]=emptyRows(),n=1):Card=>({id:crypto.r
 export default function App(){
  const [view,setView]=useState<View>("loading"),[game,setGame]=useState<Game|null>(null),[games,setGames]=useState<Game[]>([]),[draft,setDraft]=useState<Card[]>([]),[saved,setSaved]=useState(true),[sheet,setSheet]=useState<"numbers"|"menu"|null>(null),[ocr,setOcr]=useState<number|null>(null),[notice,setNotice]=useState("");
  const input=useRef<HTMLInputElement>(null);
- useEffect(()=>{(async()=>{const table=new URLSearchParams(location.search).get("tabla");if(table==="197"){const shared=await getGame("tabla-197")||table197Game();await saveGame(shared);setGame(shared);setGames(await listGames());setView("play");return}const [last,all]=await Promise.all([getLastGame(),listGames()]);setGames(all);setGame(last||null);setView("home")})()},[]);
+ useEffect(()=>{(async()=>{const table=new URLSearchParams(location.search).get("tabla");if(table==="197"||table==="214"){const id=`tabla-${table}`;const shared=await getGame(id)||(table==="197"?table197Game():table214Game());await saveGame(shared);setGame(shared);setGames(await listGames());setView("play");return}const [last,all]=await Promise.all([getLastGame(),listGames()]);setGames(all);setGame(last||null);setView("home")})()},[]);
  useEffect(()=>{if(!game||view==="loading")return;setSaved(false);const t=setTimeout(async()=>{await saveGame(game);setSaved(true);setGames(await listGames())},120);return()=>clearTimeout(t)},[game]);
  const start=(demo=false)=>{const g=demo?fixtureGame():createGame();setGame(g);setDraft(demo?g.cards:[]);if(demo){setView("play");}else{setView("verify")}};
  const update=(fn:(g:Game)=>Game)=>setGame(g=>g?fn(g):g);
