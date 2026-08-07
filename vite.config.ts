@@ -5,7 +5,7 @@ import { VitePWA } from "vite-plugin-pwa";
 export default defineConfig({
   base: "/bingo-app/",
   plugins: [react(), VitePWA({
-    registerType: "prompt",
+    registerType: "autoUpdate",
     includeAssets: ["favicon.svg", "apple-touch-icon.png"],
     manifest: {
       name: "Bingo — Cartones digitales",
