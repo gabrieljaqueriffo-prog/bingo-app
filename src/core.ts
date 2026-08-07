@@ -11,6 +11,10 @@ export function markedCount(card: Card, called: number[]) { const set = new Set(
 export function completedRows(card: Card, called: number[]) { const set = new Set(called); return card.rows.filter(row => row.every(v => v === null || set.has(v))).length; }
 export function nearestLine(card: Card, called: number[]) { const set = new Set(called); return Math.min(...card.rows.map(row => row.filter(v => v !== null && !set.has(v)).length)); }
 export function isFullCard(card: Card, called: number[]) { const set = new Set(called); return card.rows.flat().every(v => v === null || set.has(v)); }
+export function modalityRemaining(card: Card, called: number[], cells: number[]) { const set=new Set(called); return cells.filter(index=>{const value=card.rows[Math.floor(index/5)]?.[index%5];return value!==null&&!set.has(value)}).length; }
+export function modalityComplete(card: Card, called: number[], cells: number[]) { return cells.length>0&&modalityRemaining(card,called,cells)===0; }
+export function setModality(game:Game,name:string,cells:number[]):Game{return {...game,modality:{name:name.trim()||"Primera modalidad",cells:[...new Set(cells)].sort((a,b)=>a-b),status:"active"},updatedAt:new Date().toISOString()};}
+export function finishModality(game:Game):Game{return game.modality?{...game,modality:{...game.modality,status:"completed",endedAt:new Date().toISOString()},updatedAt:new Date().toISOString()}:game;}
 export function normalizeParsedCard(card: ParsedCard): ParsedCard { const rows = Array.from({length:5}, (_,r) => Array.from({length:5},(_,c) => r===2&&c===2 ? null : Number(card.rows?.[r]?.[c]) || 0)); const issues = cardIssues(rows); return {...card, rows, confidence: Math.max(0, Math.min(card.confidence, 1 - issues.length / 24))}; }
 
 const rawFixture = [

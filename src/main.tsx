@@ -3,5 +3,6 @@ import { createRoot } from "react-dom/client";
 import { registerSW } from "virtual:pwa-register";
 import App from "./App";
 import "./styles.css";
+import "./features.css";
 registerSW({onNeedRefresh(){if(confirm("Hay una versión nueva de Bingo. ¿Actualizar ahora?"))location.reload();}});
 createRoot(document.getElementById("root")!).render(<StrictMode><App/></StrictMode>);
