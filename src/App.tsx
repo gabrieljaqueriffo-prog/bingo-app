@@ -56,7 +56,7 @@ export default function App() {
     [games, setGames] = useState<Game[]>([]),
     [draft, setDraft] = useState<Card[]>([]),
     [saved, setSaved] = useState(true),
-    [sheet, setSheet] = useState<"numbers" | "pattern" | "menu" | null>(null),
+    [sheet, setSheet] = useState<"numbers" | "pattern" | "modeWin" | "menu" | null>(null),
     [ocr, setOcr] = useState<number | null>(null),
     [notice, setNotice] = useState(""),
     [cardView, setCardView] = useState<CardView>(
@@ -272,6 +272,24 @@ export default function App() {
                 d.map((c) => (c.id === card.id ? { ...c, rows } : c)),
               )
             }
+            onTableChange={(tableNumber) =>
+              setDraft((cards) => {
+                const group = cards.filter(
+                  (item) => item.sourceImageId === card.sourceImageId,
+                );
+                return cards.map((item) => {
+                  const position = group.findIndex((same) => same.id === item.id);
+                  if (position < 0) return item;
+                  return {
+                    ...item,
+                    tableNumber: tableNumber || undefined,
+                    label: tableNumber
+                      ? `Tabla ${tableNumber} · Cartón ${position + 1}`
+                      : `Cartón ${position + 1}`,
+                  };
+                });
+              })
+            }
             onDelete={() => setDraft((d) => d.filter((c) => c.id !== card.id))}
           />
         ))}
@@ -383,16 +401,16 @@ export default function App() {
           </button>
         </header>
         {mode && (
-          <button className="mode-banner" onClick={() => setSheet("pattern")}>
-            <Shapes />
-            <b>{mode.name}</b>
-            <span>
-              {bestMode === 0
-                ? "¡Un cartón completó la forma!"
-                : `El mejor está a ${bestMode}`}
-            </span>
-            <ChevronRight />
-          </button>
+          <section className="mode-banner">
+            <button className="mode-summary" onClick={() => setSheet("pattern")}>
+              <span className="mode-icon"><Shapes /></span>
+              <span><small>MODALIDAD ACTIVA</small><b>{mode.name}</b></span>
+              <strong>{bestMode === 0 ? "¡Forma lista!" : `A ${bestMode}`}</strong>
+            </button>
+            <button className="mode-finish" onClick={() => setSheet("modeWin")}>
+              🏁 Alguien ganó
+            </button>
+          </section>
         )}
         {game.cards.length > 1 && (
           <div className="view-switch" aria-label="Vista de cartones">
@@ -480,6 +498,16 @@ export default function App() {
             }}
           />
         )}{" "}
+        {sheet === "modeWin" && (
+          <ModeWinSheet
+            name={mode?.name || "Modalidad"}
+            close={() => setSheet(null)}
+            finish={() => {
+              update(finishModality);
+              setSheet(null);
+            }}
+          />
+        )}{" "}
         {sheet === "menu" && (
           <MenuSheet
             game={game}
@@ -553,10 +581,12 @@ function Toast({ text, close }: { text: string; close: () => void }) {
 function EditableCard({
   card,
   onChange,
+  onTableChange,
   onDelete,
 }: {
   card: Card;
   onChange: (r: Cell[][]) => void;
+  onTableChange: (tableNumber: number) => void;
   onDelete: () => void;
 }) {
   const set = (r: number, c: number, v: string) => {
@@ -567,7 +597,18 @@ function EditableCard({
   return (
     <section className="edit-card">
       <header>
-        <b>{card.label}</b>
+        <div className="edit-card-title">
+          <b>{card.label}</b>
+          <label className="table-field">
+            <span>Tabla</span>
+            <input
+              inputMode="numeric"
+              placeholder="Ej. 214"
+              value={card.tableNumber || ""}
+              onChange={(event) => onTableChange(Number(event.target.value))}
+            />
+          </label>
+        </div>
         <span>
           {card.confidence
             ? `${Math.round(card.confidence * 100)}% confianza`
@@ -732,23 +773,24 @@ function NumbersSheet({
 }) {
   const last = game.history.at(-1);
   return (
-    <Sheet close={close}>
-      <header>
+    <div className="number-screen">
+      <header className="number-screen-head">
         <div>
-          <p className="eyebrow">ANOTA LAS BOLAS</p>
-          <h2>Tablero general</h2>
+          <p>CONTROL DE JUEGO</p>
+          <h2>Tablero BINGO</h2>
         </div>
-        <button onClick={close}>
+        <button onClick={close} aria-label="Cerrar tablero">
           <X />
         </button>
       </header>
-      {last && (
+      <div className="board-status">
         <div className="last-ball">
           <small>ÚLTIMA BOLA</small>
-          <b>{last}</b>
-          <span>{game.calledNumbers.length} de 75 salidos</span>
+          <b>{last || "—"}</b>
         </div>
-      )}
+        <div><strong>{game.calledNumbers.length}</strong><span>de 75 salieron</span></div>
+        <p>Toca una bola y volverás automáticamente a tus cartones.</p>
+      </div>
       <div className="board-letters">
         {"BINGO".split("").map((x) => (
           <b key={x}>{x}</b>
@@ -769,10 +811,7 @@ function NumbersSheet({
             </button>
           ))}
       </div>
-      <p className="board-help">
-        Toca cualquier número que salga. Se marcará en todos tus cartones.
-      </p>
-    </Sheet>
+    </div>
   );
 }
 function PatternSheet({
@@ -844,6 +883,30 @@ function PatternSheet({
         </button>
       )}
     </Sheet>
+  );
+}
+function ModeWinSheet({
+  name,
+  close,
+  finish,
+}: {
+  name: string;
+  close: () => void;
+  finish: () => void;
+}) {
+  return (
+    <div className="celebration" role="dialog" aria-modal="true">
+      <div className="confetti" aria-hidden="true">● ◆ ★ ● ◆</div>
+      <button className="celebration-close" onClick={close} aria-label="Cerrar"><X /></button>
+      <div className="celebration-ball">🏆</div>
+      <p>¡TENEMOS GANADOR!</p>
+      <h2>{name}</h2>
+      <span>La primera modalidad terminó. Tus números marcados se conservan.</span>
+      <button className="continue-full" onClick={finish}>
+        Seguir a cartón completo <ChevronRight />
+      </button>
+      <button className="celebration-back" onClick={close}>Todavía no</button>
+    </div>
   );
 }
 function MenuSheet({

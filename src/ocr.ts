@@ -54,7 +54,7 @@ export class BrowserCardImageParser implements CardImageParser {
       let cards:ParsedCard[]=extractCardsFromText(fullResult.data.text).map(card=>({...card,tableNumber}));
       const grids=await isolateCardGrids(file);
       if(grids.length){await worker.setParameters({tessedit_pageseg_mode:PSM.SINGLE_BLOCK,tessedit_char_whitelist:"0123456789 BINGO"});const spatial:ParsedCard[]=[];for(let i=0;i<grids.length;i++){onProgress?.(20+Math.round(i/Math.max(grids.length,1)*75));spatial.push(...(await recognize(worker,grids[i])).map(card=>({...card,tableNumber})));}if(spatial.length>cards.length)cards=spatial.slice(0,4);}
-      return {sourceImageId:crypto.randomUUID(),cards,tableNumber,warnings:cards.length?[`Se detectaron ${cards.length} cartón${cards.length===1?"":"es"}${tableNumber?` de la Tabla ${tableNumber}`:""}. Revísalos antes de confirmar.`]:["No se detectó una cuadrícula fiable. Prueba con la imagen recortada y de frente, o crea el cartón manualmente."]};
+      return {sourceImageId:crypto.randomUUID(),cards,tableNumber,warnings:cards.length?[tableNumber?`Se detectaron ${cards.length} cartón${cards.length===1?"":"es"} de la Tabla ${tableNumber}. Revísalos antes de confirmar.`:`Se detectaron ${cards.length} cartones, pero no el número de tabla. Escríbelo en el campo Tabla y se aplicará a los cuatro.`]:["No se detectó una cuadrícula fiable. Prueba con la imagen recortada y de frente, o crea el cartón manualmente."]};
     }finally{await worker.terminate();}
   }
 }
