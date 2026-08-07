@@ -20,4 +20,11 @@ const rawFixture = [
 [[5,23,41,59,73],[14,17,37,56,71],[15,28,null,50,74],[3,24,42,52,64],[8,19,36,58,67]]
 ] as Cell[][][];
 export function fixtureGame(): Game { const id = crypto.randomUUID(); const now = new Date().toISOString(); return {id,name:"Tabla 214",createdAt:now,updatedAt:now,status:"active",calledNumbers:[],history:[],cards:rawFixture.map((rows,i)=>({id:crypto.randomUUID(),gameId:id,label:`Cartón ${i+1}`,rows}))}; }
+const table197Rows = [
+[[6,23,34,59,70],[2,26,43,49,74],[3,27,null,57,67],[13,22,40,52,68],[7,24,38,46,71]],
+[[8,26,42,53,61],[3,19,45,56,72],[15,25,null,57,69],[12,17,40,50,71],[6,28,43,49,64]],
+[[9,16,44,57,74],[1,29,39,51,70],[12,17,null,56,64],[13,24,43,60,66],[4,28,37,53,65]],
+[[4,29,33,60,63],[9,17,44,57,62],[6,19,null,55,73],[13,26,41,49,64],[11,25,45,54,75]]
+] as Cell[][][];
+export function table197Game(): Game { const id="tabla-197", now=new Date().toISOString(); return {id,name:"Tabla 197",createdAt:now,updatedAt:now,status:"active",calledNumbers:[],history:[],cards:table197Rows.map((rows,i)=>({id:`tabla-197-carton-${i+1}`,gameId:id,label:`Cartón ${i+1}`,rows}))}; }
 export function createGame(name="Nueva partida"): Game { const id=crypto.randomUUID(), now=new Date().toISOString(); return {id,name,createdAt:now,updatedAt:now,status:"active",calledNumbers:[],history:[],cards:[]}; }
