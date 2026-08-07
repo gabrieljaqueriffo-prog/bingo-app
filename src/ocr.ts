@@ -3,6 +3,7 @@ import { COLUMN_RANGES, normalizeParsedCard } from "./core";
 import type { CardImageParser, Cell, ParseResult, ParsedCard } from "./types";
 
 const numberTokens=(text:string)=>(text.match(/\b(?:[1-9]|[1-6]\d|7[0-5])\b/g)||[]).map(Number);
+export const extractTableNumber=(text:string)=>{const match=text.toUpperCase().replace(/\s+/g," ").match(/TA[B8]LA\s*[:\-]?\s*(\d{1,4})/);return match?Number(match[1]):undefined;};
 const expectedColumn=(position:number)=>position<12?position%5:(position+1)%5;
 const decodeDigits=(digits:string,columns:number[],at=0,index=0,values:number[]=[]):number[]|null=>{if(index===columns.length)return at===digits.length?values:null;for(const size of [1,2]){if(at+size>digits.length)continue;const value=Number(digits.slice(at,at+size)),[min,max]=COLUMN_RANGES[columns[index]];if(value>=min&&value<=max){const result=decodeDigits(digits,columns,at+size,index+1,[...values,value]);if(result)return result;}}return null;};
 const extractByRows=(text:string):ParsedCard[]=>{const lines=text.split(/\r?\n/).map(line=>line.replace(/\D/g,"")).filter(Boolean),cards:ParsedCard[]=[];for(let start=0;start+4<lines.length;start++){const decoded=lines.slice(start,start+5).map((line,row)=>decodeDigits(line,row===2?[0,1,3,4]:[0,1,2,3,4]));if(decoded.every(Boolean)){const rows=decoded.map((values,row)=>row===2?[values![0],values![1],null,values![2],values![3]]:values!) as Cell[][];cards.push(normalizeParsedCard({id:crypto.randomUUID(),rows,confidence:.96}));start+=4;}}return cards;};
@@ -39,16 +40,21 @@ async function isolateCardGrids(file:File):Promise<Blob[]>{
   }
   bitmap.close();return parts;
 }
+async function isolateTableLabel(file:File):Promise<Blob|null>{
+  const bitmap=await createImageBitmap(file),source=document.createElement("canvas"),ctx=source.getContext("2d",{willReadFrequently:true})!;source.width=bitmap.width;source.height=bitmap.height;ctx.drawImage(bitmap,0,0);const boxes=findGridBoxesFromPixels(ctx.getImageData(0,0,source.width,source.height).data,source.width,source.height);if(!boxes.length){bitmap.close();return null;}const firstY=Math.min(...boxes.map(box=>box.y0)),top=Math.max(0,firstY-Math.round(source.height*.105)),height=Math.max(42,Math.round(source.height*.06)),out=document.createElement("canvas"),outCtx=out.getContext("2d")!;out.width=Math.min(1600,source.width*2.5);out.height=Math.round(out.width*height/source.width);outCtx.filter="contrast(1.8) grayscale(1)";outCtx.drawImage(bitmap,0,top,source.width,height,0,0,out.width,out.height);bitmap.close();return canvasBlob(out);
+}
 async function recognize(worker:Worker,image:File|Blob){const result=await worker.recognize(image);return extractCardsFromText(result.data.text);}
 export class BrowserCardImageParser implements CardImageParser {
   async parse(file:File,onProgress?:(n:number)=>void):Promise<ParseResult>{
     const worker=await createWorker("eng",1,{logger:m=>{if(m.status==="recognizing text")onProgress?.(Math.round((m.progress||0)*100));}});
     try{
-      await worker.setParameters({tessedit_char_whitelist:"0123456789 BINGO",preserve_interword_spaces:"1",user_defined_dpi:"300"});
-      let cards=await recognize(worker,file);
+      await worker.setParameters({tessedit_char_whitelist:"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ :-",preserve_interword_spaces:"1",user_defined_dpi:"300"});
+      const fullResult=await worker.recognize(file);let tableNumber=extractTableNumber(fullResult.data.text);
+      if(!tableNumber){const tableLabel=await isolateTableLabel(file);if(tableLabel){await worker.setParameters({tessedit_pageseg_mode:PSM.SINGLE_LINE,tessedit_char_whitelist:"0123456789"});const labelResult=await worker.recognize(tableLabel),labelText=labelResult.data.text;tableNumber=Number(labelText.match(/\b([1-9]\d{2,3})\b/)?.[1])||undefined;}}
+      let cards:ParsedCard[]=extractCardsFromText(fullResult.data.text).map(card=>({...card,tableNumber}));
       const grids=await isolateCardGrids(file);
-      if(grids.length){await worker.setParameters({tessedit_pageseg_mode:PSM.SINGLE_BLOCK});const spatial:ParsedCard[]=[];for(let i=0;i<grids.length;i++){onProgress?.(20+Math.round(i/Math.max(grids.length,1)*75));spatial.push(...await recognize(worker,grids[i]));}if(spatial.length>cards.length)cards=spatial.slice(0,4);}
-      return {sourceImageId:crypto.randomUUID(),cards,warnings:cards.length?[`Se detectaron ${cards.length} cartón${cards.length===1?"":"es"}. Revísalos antes de confirmar.`]:["No se detectó una cuadrícula fiable. Prueba con la imagen recortada y de frente, o crea el cartón manualmente."]};
+      if(grids.length){await worker.setParameters({tessedit_pageseg_mode:PSM.SINGLE_BLOCK,tessedit_char_whitelist:"0123456789 BINGO"});const spatial:ParsedCard[]=[];for(let i=0;i<grids.length;i++){onProgress?.(20+Math.round(i/Math.max(grids.length,1)*75));spatial.push(...(await recognize(worker,grids[i])).map(card=>({...card,tableNumber})));}if(spatial.length>cards.length)cards=spatial.slice(0,4);}
+      return {sourceImageId:crypto.randomUUID(),cards,tableNumber,warnings:cards.length?[`Se detectaron ${cards.length} cartón${cards.length===1?"":"es"}${tableNumber?` de la Tabla ${tableNumber}`:""}. Revísalos antes de confirmar.`]:["No se detectó una cuadrícula fiable. Prueba con la imagen recortada y de frente, o crea el cartón manualmente."]};
     }finally{await worker.terminate();}
   }
 }

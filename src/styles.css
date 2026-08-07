@@ -825,3 +825,61 @@ button {
   font-size: 12px;
   padding: 7px;
 }
+.hot-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: #e94b25;
+  color: white !important;
+  font-size: 7px !important;
+  line-height: 1;
+  white-space: nowrap;
+}
+.hot-reasons {
+  display: flex;
+  gap: 3px;
+  padding: 0 5px 4px;
+}
+.hot-reasons span {
+  background: #fff0dc;
+  color: #9d3c18;
+  border-radius: 4px;
+  padding: 2px 4px;
+  font-size: 7px;
+  font-weight: 800;
+}
+.bingo-card.hot { border-color: #f0642f; }
+
+@media (max-width: 500px) {
+  .cards-grid.view-all.count-8 {
+    gap: 3px;
+    padding: 3px;
+  }
+  .cards-grid.view-all.count-8 .bingo-card > header {
+    min-height: 23px;
+    padding: 2px 4px;
+    font-size: 7px;
+  }
+  .cards-grid.view-all.count-8 .bingo-card > header > div {
+    min-width: 0;
+  }
+  .cards-grid.view-all.count-8 .bingo-card > header b {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .cards-grid.view-all.count-8 .hot-badge { font-size: 6px !important; padding: 2px 3px; }
+  .cards-grid.view-all.count-8 .hot-reasons { display: none; }
+  .cards-grid.view-all.count-8 .bingo-letters { font-size: 8px; padding: 1px; }
+  .cards-grid.view-all.count-8 .number-grid button,
+  .cards-grid.view-all.count-8 .number-grid > span {
+    aspect-ratio: auto;
+    height: clamp(17px, 2.55dvh, 23px);
+    font-size: 9px;
+  }
+  .cards-grid.view-all.count-8 .bingo-card > footer {
+    padding: 2px;
+    font-size: 6px;
+  }
+}

@@ -15,7 +15,6 @@ import {
   RotateCcw,
   Shapes,
   Share2,
-  Trophy,
   Undo2,
   X,
 } from "lucide-react";
@@ -117,11 +116,14 @@ export default function App() {
     for (const file of Array.from(files)) {
       try {
         const result = await parser.parse(file, setOcr);
-        result.cards.forEach((c: ParsedCard) =>
+        result.cards.forEach((c: ParsedCard, cardIndex) =>
           found.push({
             ...c,
             gameId: game.id,
-            label: `Cartón ${draft.length + found.length + 1}`,
+            label: result.tableNumber
+              ? `Tabla ${result.tableNumber} · Cartón ${cardIndex + 1}`
+              : `Cartón ${draft.length + found.length + 1}`,
+            tableNumber: result.tableNumber,
             sourceImageId: result.sourceImageId,
           }),
         );
@@ -346,10 +348,16 @@ export default function App() {
         )
       : [];
     const bestMode = distances.length ? Math.min(...distances) : Infinity;
-    const leader = Math.max(
-      ...game.cards.map((c) => markedCount(c, game.calledNumbers)),
-      0,
+    const bingoDistances = game.cards.map(
+      (card) => 24 - markedCount(card, game.calledNumbers),
     );
+    const bestBingo = bingoDistances.length ? Math.min(...bingoDistances) : 24;
+    const hotBingoId = game.calledNumbers.length
+      ? game.cards[bingoDistances.indexOf(bestBingo)]?.id
+      : undefined;
+    const hotModeId = mode && game.calledNumbers.length
+      ? game.cards[distances.indexOf(bestMode)]?.id
+      : undefined;
     const last = game.history.at(-1);
     const pageSize = cardView === "one" ? 1 : cardView === "four" ? 4 : game.cards.length || 1;
     const totalPages = Math.max(1, Math.ceil(game.cards.length / pageSize));
@@ -408,13 +416,8 @@ export default function App() {
               called={game.calledNumbers}
               last={last}
               modality={mode}
-              leader={
-                mode
-                  ? modalityRemaining(card, game.calledNumbers, mode.cells) ===
-                    bestMode
-                  : leader > 0 &&
-                    markedCount(card, game.calledNumbers) === leader
-              }
+              hotMode={card.id === hotModeId}
+              hotBingo={card.id === hotBingoId}
               tap={(n) => {
                 navigator.vibrate?.(18);
                 update((g) => toggleNumber(g, n));
@@ -617,14 +620,16 @@ function BingoCard({
   called,
   last,
   modality,
-  leader,
+  hotMode,
+  hotBingo,
   tap,
 }: {
   card: Card;
   called: number[];
   last?: number;
   modality?: Game["modality"];
-  leader: boolean;
+  hotMode: boolean;
+  hotBingo: boolean;
   tap: (n: number) => void;
 }) {
   const lines = completedRows(card, called),
@@ -638,15 +643,21 @@ function BingoCard({
       : false;
   return (
     <article
-      className={`bingo-card ${leader ? "leader" : ""} ${full ? "winner" : ""}`}
+      className={`bingo-card ${hotMode || hotBingo ? "leader hot" : ""} ${full ? "winner" : ""}`}
     >
       <header>
         <div>
           <b>{card.label}</b>
-          {leader && <Trophy />}
+          {(hotMode || hotBingo) && <span className="hot-badge" aria-label="Cartón más cerca de ganar">🔥 HOT</span>}
         </div>
         <span>{markedCount(card, called)}/24</span>
       </header>
+      {(hotMode || hotBingo) && (
+        <div className="hot-reasons">
+          {hotMode && <span>Modalidad</span>}
+          {hotBingo && <span>Bingo completo</span>}
+        </div>
+      )}
       <div className="bingo-letters">
         {"BINGO".split("").map((x) => (
           <b key={x}>{x}</b>
