@@ -11,6 +11,10 @@ import {
   History,
   ImagePlus,
   MoreHorizontal,
+  Mic,
+  MicOff,
+  Palette,
+  Pin,
   Plus,
   RotateCcw,
   Shapes,
@@ -30,7 +34,6 @@ import {
   markedCount,
   modalityComplete,
   modalityRemaining,
-  nearestLine,
   resetMarks,
   setModality,
   table197Game,
@@ -43,6 +46,8 @@ import type { Card, Cell, Game, ParsedCard } from "./types";
 
 type View = "loading" | "home" | "games" | "verify" | "play";
 type CardView = "all" | "four" | "one";
+type PlayTheme = { marked: string; last: string; modality: string };
+const defaultTheme: PlayTheme = { marked: "#ffc94a", last: "#318df0", modality: "#8b6cf6" };
 const parser = new BrowserCardImageParser();
 const makeCard = (
   gameId: string,
@@ -56,13 +61,18 @@ export default function App() {
     [games, setGames] = useState<Game[]>([]),
     [draft, setDraft] = useState<Card[]>([]),
     [saved, setSaved] = useState(true),
-    [sheet, setSheet] = useState<"numbers" | "pattern" | "modeWin" | "menu" | null>(null),
+    [sheet, setSheet] = useState<"numbers" | "pattern" | "modeWin" | "theme" | "menu" | null>(null),
     [ocr, setOcr] = useState<number | null>(null),
     [notice, setNotice] = useState(""),
     [cardView, setCardView] = useState<CardView>(
       () => (localStorage.getItem("bingo-card-view") as CardView) || "four",
     ),
-    [cardPage, setCardPage] = useState(0);
+    [cardPage, setCardPage] = useState(0),
+    [boardPinned, setBoardPinned] = useState(false),
+    [playTheme, setPlayTheme] = useState<PlayTheme>(() => {
+      try { return { ...defaultTheme, ...JSON.parse(localStorage.getItem("bingo-theme") || "{}") }; }
+      catch { return defaultTheme; }
+    });
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => {
     (async () => {
@@ -98,6 +108,12 @@ export default function App() {
     localStorage.setItem("bingo-card-view", cardView);
     setCardPage(0);
   }, [cardView]);
+  useEffect(() => {
+    localStorage.setItem("bingo-theme", JSON.stringify(playTheme));
+    document.documentElement.style.setProperty("--play-mark", playTheme.marked);
+    document.documentElement.style.setProperty("--play-last", playTheme.last);
+    document.documentElement.style.setProperty("--play-mode", playTheme.modality);
+  }, [playTheme]);
   const start = (demo = false) => {
     const g = demo ? fixtureGame() : createGame();
     setGame(g);
@@ -109,6 +125,13 @@ export default function App() {
     }
   };
   const update = (fn: (g: Game) => Game) => setGame((g) => (g ? fn(g) : g));
+  const markNumber = (number: number, fromBoard = false) => {
+    if (!game) return;
+    if (game.calledNumbers.includes(number) && !confirm(`El número ${number} ya salió. ¿Seguro que deseas eliminarlo?`)) return;
+    navigator.vibrate?.(18);
+    update((current) => toggleNumber(current, number));
+    if (fromBoard && !boardPinned) setSheet(null);
+  };
   async function upload(files: FileList | null) {
     if (!files || !game) return;
     setOcr(0);
@@ -436,10 +459,7 @@ export default function App() {
               modality={mode}
               hotMode={card.id === hotModeId}
               hotBingo={card.id === hotBingoId}
-              tap={(n) => {
-                navigator.vibrate?.(18);
-                update((g) => toggleNumber(g, n));
-              }}
+              tap={(n) => markNumber(n)}
             />
           ))}
         </div>
@@ -477,10 +497,11 @@ export default function App() {
         {sheet === "numbers" && (
           <NumbersSheet
             game={game}
-            toggle={(n) => {
-              update((g) => toggleNumber(g, n));
-              setSheet(null);
-            }}
+            toggle={(n) => markNumber(n, true)}
+            pinned={boardPinned}
+            setPinned={setBoardPinned}
+            hotMode={hotModeId ? { label: game.cards.find((card) => card.id === hotModeId)?.label || "Cartón", remaining: bestMode } : undefined}
+            hotBingo={hotBingoId ? { label: game.cards.find((card) => card.id === hotBingoId)?.label || "Cartón", remaining: bestBingo } : undefined}
             close={() => setSheet(null)}
           />
         )}{" "}
@@ -508,11 +529,20 @@ export default function App() {
             }}
           />
         )}{" "}
+        {sheet === "theme" && (
+          <ThemeSheet
+            theme={playTheme}
+            setTheme={setPlayTheme}
+            reset={() => setPlayTheme(defaultTheme)}
+            close={() => setSheet(null)}
+          />
+        )}{" "}
         {sheet === "menu" && (
           <MenuSheet
             game={game}
             close={() => setSheet(null)}
             pattern={() => setSheet("pattern")}
+            theme={() => setSheet("theme")}
             reset={() => {
               if (
                 confirm(
@@ -674,7 +704,6 @@ function BingoCard({
   tap: (n: number) => void;
 }) {
   const lines = completedRows(card, called),
-    near = nearestLine(card, called),
     full = isFullCard(card, called),
     remaining = modality
       ? modalityRemaining(card, called, modality.cells)
@@ -738,10 +767,8 @@ function BingoCard({
           : full
             ? "¡Cartón completo!"
             : lines
-              ? `${lines} línea${lines > 1 ? "s" : ""} completa${lines > 1 ? "s" : ""}`
-              : near <= 2
-                ? `A ${near} de una línea`
-                : "En juego"}
+              ? `${lines} línea${lines > 1 ? "s" : ""} · faltan ${24 - markedCount(card, called)} para bingo`
+              : `Faltan ${24 - markedCount(card, called)} para bingo`}
       </footer>
     </article>
   );
@@ -762,16 +789,45 @@ function Sheet({
     </div>
   );
 }
+const normalizeSpeech = (text: string) => text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+function spokenNumber(text: string) {
+  const normalized = normalizeSpeech(text), digits = normalized.match(/\b([1-9]|[1-6]\d|7[0-5])\b/);
+  if (digits) return Number(digits[1]);
+  const first = ["", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez", "once", "doce", "trece", "catorce", "quince", "dieciseis", "diecisiete", "dieciocho", "diecinueve", "veinte", "veintiuno", "veintidos", "veintitres", "veinticuatro", "veinticinco", "veintiseis", "veintisiete", "veintiocho", "veintinueve"];
+  const words: Array<[string, number]> = first.slice(1).map((word, index) => [word, index + 1]);
+  [[30, "treinta"], [40, "cuarenta"], [50, "cincuenta"], [60, "sesenta"], [70, "setenta"]].forEach(([base, word]) => { words.push([word as string, base as number]); for (let unit = 1; unit <= Math.min(9, 75 - Number(base)); unit++) words.push([`${word} y ${first[unit]}`, Number(base) + unit]); });
+  return words.sort((a, b) => b[0].length - a[0].length).find(([word]) => normalized.includes(word))?.[1];
+}
+const shortCardLabel = (label: string) => label.replace("Cartón", "C.");
 function NumbersSheet({
   game,
   toggle,
+  pinned,
+  setPinned,
+  hotMode,
+  hotBingo,
   close,
 }: {
   game: Game;
   toggle: (n: number) => void;
+  pinned: boolean;
+  setPinned: (value: boolean) => void;
+  hotMode?: { label: string; remaining: number };
+  hotBingo?: { label: string; remaining: number };
   close: () => void;
 }) {
-  const last = game.history.at(-1);
+  const last = game.history.at(-1),
+    recognition = useRef<any>(null),
+    [listening, setListening] = useState(false),
+    voiceSupported = typeof window !== "undefined" && Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+  const voice = () => {
+    if (listening) { recognition.current?.stop(); setListening(false); return; }
+    const Recognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!Recognition) return;
+    const listener = new Recognition(); recognition.current = listener; listener.lang = "es-VE"; listener.continuous = true; listener.interimResults = false;
+    listener.onresult = (event: any) => { for (let index = event.resultIndex; index < event.results.length; index++) { const value = spokenNumber(event.results[index][0].transcript); if (value) toggle(value); } };
+    listener.onerror = () => setListening(false); listener.onend = () => setListening(false); listener.start(); setListening(true);
+  };
   return (
     <div className="number-screen">
       <header className="number-screen-head">
@@ -779,18 +835,26 @@ function NumbersSheet({
           <p>CONTROL DE JUEGO</p>
           <h2>Tablero BINGO</h2>
         </div>
-        <button onClick={close} aria-label="Cerrar tablero">
-          <X />
-        </button>
+        <div className="board-head-actions">
+          {voiceSupported && <button className={listening ? "listening" : ""} onClick={voice} aria-label={listening ? "Detener micrófono" : "Anotar números por voz"}>{listening ? <MicOff /> : <Mic />}</button>}
+          <button className={pinned ? "pinned" : ""} onClick={() => setPinned(!pinned)} aria-label={pinned ? "Desfijar tablero" : "Dejar tablero fijo"}><Pin /></button>
+          <button onClick={close} aria-label="Cerrar tablero"><X /></button>
+        </div>
       </header>
       <div className="board-status">
         <div className="last-ball">
           <small>ÚLTIMA BOLA</small>
           <b>{last || "—"}</b>
         </div>
-        <div><strong>{game.calledNumbers.length}</strong><span>de 75 salieron</span></div>
-        <p>Toca una bola y volverás automáticamente a tus cartones.</p>
+        <div className="called-total"><strong>{game.calledNumbers.length}</strong><span>de 75</span></div>
+        <div className="board-hot">
+          <b>🔥 HOT</b>
+          {hotMode && <span><strong>Modalidad</strong> {shortCardLabel(hotMode.label)} · faltan {hotMode.remaining}</span>}
+          {hotBingo && <span><strong>Bingo</strong> {shortCardLabel(hotBingo.label)} · faltan {hotBingo.remaining}</span>}
+          {!hotMode && !hotBingo && <span>Marca una bola para ver quién lidera.</span>}
+        </div>
       </div>
+      <div className="board-tools-note">{pinned ? "📌 Tablero fijo: puedes marcar varios números seguidos." : "Toca una bola para marcarla y volver a los cartones."}{listening && <strong> 🎙️ Escuchando…</strong>}</div>
       <div className="board-letters">
         {"BINGO".split("").map((x) => (
           <b key={x}>{x}</b>
@@ -909,10 +973,46 @@ function ModeWinSheet({
     </div>
   );
 }
+function ThemeSheet({
+  theme,
+  setTheme,
+  reset,
+  close,
+}: {
+  theme: PlayTheme;
+  setTheme: (theme: PlayTheme) => void;
+  reset: () => void;
+  close: () => void;
+}) {
+  const colors: Array<{ key: keyof PlayTheme; label: string; text: string }> = [
+    { key: "marked", label: "Número marcado", text: "22" },
+    { key: "last", label: "Última bola", text: "48" },
+    { key: "modality", label: "Casilla de modalidad", text: "35" },
+  ];
+  return (
+    <Sheet close={close}>
+      <header><div><p className="eyebrow">TU ESTILO</p><h2>Colores de juego</h2></div><button onClick={close}><X /></button></header>
+      <p className="theme-help">Elige tus colores y mira inmediatamente cómo se verá la partida.</p>
+      <div className="theme-preview" style={{ "--preview-mark": theme.marked, "--preview-last": theme.last, "--preview-mode": theme.modality } as React.CSSProperties}>
+        <div><small>B</small><b style={{ background: "var(--preview-mark)" }}>22</b><span>Marcado</span></div>
+        <div><small>I</small><b style={{ background: "var(--preview-last)", color: "white" }}>48</b><span>Última</span></div>
+        <div><small>N</small><b style={{ background: "var(--preview-mode)", color: "white" }}>35</b><span>Modalidad</span></div>
+      </div>
+      <div className="color-options">
+        {colors.map((item) => (
+          <label key={item.key}><span><b>{item.label}</b><small>{theme[item.key]}</small></span><input type="color" value={theme[item.key]} onChange={(event) => setTheme({ ...theme, [item.key]: event.target.value })} /></label>
+        ))}
+      </div>
+      <button className="primary theme-done" onClick={close}><Check /> Usar estos colores</button>
+      <button className="theme-reset" onClick={reset}>Restaurar colores originales</button>
+    </Sheet>
+  );
+}
 function MenuSheet({
   game,
   close,
   pattern,
+  theme,
   reset,
   add,
   fresh,
@@ -920,6 +1020,7 @@ function MenuSheet({
   game: Game;
   close: () => void;
   pattern: () => void;
+  theme: () => void;
   reset: () => void;
   add: () => void;
   fresh: () => void;
@@ -941,6 +1042,14 @@ function MenuSheet({
           <span>
             <b>Configurar modalidad</b>
             <small>Dibuja la forma del primer juego</small>
+          </span>
+          <ChevronRight />
+        </button>
+        <button onClick={theme}>
+          <Palette />
+          <span>
+            <b>Personalizar colores</b>
+            <small>Prueba cómo se verá tu partida</small>
           </span>
           <ChevronRight />
         </button>
