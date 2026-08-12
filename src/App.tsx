@@ -46,8 +46,8 @@ import type { Card, Cell, Game, ParsedCard } from "./types";
 
 type View = "loading" | "home" | "games" | "verify" | "play";
 type CardView = "all" | "four" | "one";
-type PlayTheme = { marked: string; last: string; modality: string };
-const defaultTheme: PlayTheme = { marked: "#ffc94a", last: "#318df0", modality: "#8b6cf6" };
+type PlayTheme = { marked: string; marked2: string; last: string; last2: string; modality: string; modality2: string; gradient: boolean };
+const defaultTheme: PlayTheme = { marked: "#ffc94a", marked2: "#ff9f2e", last: "#318df0", last2: "#705cff", modality: "#8b6cf6", modality2: "#ef5da8", gradient: true };
 const parser = new BrowserCardImageParser();
 const makeCard = (
   gameId: string,
@@ -110,9 +110,11 @@ export default function App() {
   }, [cardView]);
   useEffect(() => {
     localStorage.setItem("bingo-theme", JSON.stringify(playTheme));
-    document.documentElement.style.setProperty("--play-mark", playTheme.marked);
-    document.documentElement.style.setProperty("--play-last", playTheme.last);
-    document.documentElement.style.setProperty("--play-mode", playTheme.modality);
+    const paint = (first: string, second: string) => playTheme.gradient ? `linear-gradient(135deg, ${first}, ${second})` : first;
+    document.documentElement.style.setProperty("--play-mark", paint(playTheme.marked, playTheme.marked2));
+    document.documentElement.style.setProperty("--play-last", paint(playTheme.last, playTheme.last2));
+    document.documentElement.style.setProperty("--play-mode", paint(playTheme.modality, playTheme.modality2));
+    document.documentElement.style.setProperty("--play-mode-solid", playTheme.modality);
   }, [playTheme]);
   const start = (demo = false) => {
     const g = demo ? fixtureGame() : createGame();
@@ -741,7 +743,7 @@ function BingoCard({
             return v === null ? (
               <span
                 key={`${r}-${c}`}
-                className={`free ${modeCell ? "mode-cell mode-done" : ""}`}
+                className={`free ${modeCell ? "mode-cell" : ""}`}
               >
                 ★
               </span>
@@ -816,7 +818,7 @@ function NumbersSheet({
   hotBingo?: { label: string; remaining: number };
   close: () => void;
 }) {
-  const last = game.history.at(-1),
+  const recent = game.history.slice(-3).reverse(), last = recent[0],
     recognition = useRef<any>(null),
     [listening, setListening] = useState(false),
     voiceSupported = typeof window !== "undefined" && Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
@@ -842,11 +844,11 @@ function NumbersSheet({
         </div>
       </header>
       <div className="board-status">
-        <div className="last-ball">
-          <small>ÚLTIMA BOLA</small>
-          <b>{last || "—"}</b>
+        <div className="recent-balls">
+          <small>ÚLTIMAS 3</small>
+          <div>{[0, 1, 2].map((index) => <b key={index} className={index === 0 ? "current" : ""}>{recent[index] || "—"}</b>)}</div>
         </div>
-        <div className="called-total"><strong>{game.calledNumbers.length}</strong><span>de 75</span></div>
+        <div className="called-total"><strong>{game.calledNumbers.length}</strong><span>números salieron</span></div>
         <div className="board-hot">
           <b>🔥 HOT</b>
           {hotMode && <span><strong>Modalidad</strong> {shortCardLabel(hotMode.label)} · faltan {hotMode.remaining}</span>}
@@ -984,23 +986,25 @@ function ThemeSheet({
   reset: () => void;
   close: () => void;
 }) {
-  const colors: Array<{ key: keyof PlayTheme; label: string; text: string }> = [
-    { key: "marked", label: "Número marcado", text: "22" },
-    { key: "last", label: "Última bola", text: "48" },
-    { key: "modality", label: "Casilla de modalidad", text: "35" },
+  const colors: Array<{ key: "marked" | "last" | "modality"; second: "marked2" | "last2" | "modality2"; label: string }> = [
+    { key: "marked", second: "marked2", label: "Número marcado" },
+    { key: "last", second: "last2", label: "Última bola" },
+    { key: "modality", second: "modality2", label: "Modalidad marcada" },
   ];
+  const paint = (first: string, second: string) => theme.gradient ? `linear-gradient(135deg, ${first}, ${second})` : first;
   return (
     <Sheet close={close}>
       <header><div><p className="eyebrow">TU ESTILO</p><h2>Colores de juego</h2></div><button onClick={close}><X /></button></header>
       <p className="theme-help">Elige tus colores y mira inmediatamente cómo se verá la partida.</p>
-      <div className="theme-preview" style={{ "--preview-mark": theme.marked, "--preview-last": theme.last, "--preview-mode": theme.modality } as React.CSSProperties}>
-        <div><small>B</small><b style={{ background: "var(--preview-mark)" }}>22</b><span>Marcado</span></div>
-        <div><small>I</small><b style={{ background: "var(--preview-last)", color: "white" }}>48</b><span>Última</span></div>
-        <div><small>N</small><b style={{ background: "var(--preview-mode)", color: "white" }}>35</b><span>Modalidad</span></div>
+      <div className="theme-preview">
+        <div><small>B</small><b style={{ background: paint(theme.marked, theme.marked2) }}>22</b><span>Marcado</span></div>
+        <div><small>I</small><b style={{ background: paint(theme.last, theme.last2), color: "white" }}>48</b><span>Última</span></div>
+        <div><small>N</small><b style={{ background: paint(theme.modality, theme.modality2), color: "white" }}>35</b><span>Modalidad</span></div>
       </div>
+      <label className="gradient-toggle"><span><b>Usar gradientes</b><small>Combina dos colores en cada ficha.</small></span><input type="checkbox" checked={theme.gradient} onChange={(event) => setTheme({ ...theme, gradient: event.target.checked })} /></label>
       <div className="color-options">
         {colors.map((item) => (
-          <label key={item.key}><span><b>{item.label}</b><small>{theme[item.key]}</small></span><input type="color" value={theme[item.key]} onChange={(event) => setTheme({ ...theme, [item.key]: event.target.value })} /></label>
+          <label key={item.key}><span><b>{item.label}</b><small>{theme.gradient ? "Color inicial y final" : "Color sólido"}</small></span><div className="color-pair"><input aria-label={`${item.label} inicial`} type="color" value={theme[item.key]} onChange={(event) => setTheme({ ...theme, [item.key]: event.target.value })} />{theme.gradient && <input aria-label={`${item.label} final`} type="color" value={theme[item.second]} onChange={(event) => setTheme({ ...theme, [item.second]: event.target.value })} />}</div></label>
         ))}
       </div>
       <button className="primary theme-done" onClick={close}><Check /> Usar estos colores</button>

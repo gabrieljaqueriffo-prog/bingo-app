@@ -935,9 +935,9 @@ button {
 .number-grid button.last-called { background: var(--play-last) !important; color: white; }
 .number-grid button.mode-cell,
 .number-grid > span.mode-cell {
-  background: color-mix(in srgb, var(--play-mode) 72%, white) !important;
-  color: #24164f !important;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--play-mode) 80%, black) !important;
+  background: #fff !important;
+  color: inherit !important;
+  box-shadow: inset 0 0 0 3px var(--play-mode-solid) !important;
 }
 .number-grid button.mode-cell.mode-done,
 .number-grid > span.mode-cell.mode-done {
@@ -1049,7 +1049,7 @@ button {
 .board-head-actions button.listening { background: #ff5e63; animation: mic-pulse 1s infinite alternate; }
 .board-status {
   display: grid;
-  grid-template-columns: 58px 42px minmax(0, 1fr);
+  grid-template-columns: 128px 56px minmax(0, 1fr);
   align-items: center;
   gap: 8px;
   margin: 2px 0 7px;
@@ -1061,9 +1061,11 @@ button {
 .called-total { display: grid; text-align: center; align-content: center; }
 .called-total strong { font-size: 18px; color: #ffda62; }
 .called-total span { font-size: 7px; opacity: .7; }
-.last-ball { display: grid; justify-items: center; gap: 2px; }
-.last-ball small { font-size: 5px; letter-spacing: .06em; white-space: nowrap; }
-.last-ball b { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; background: var(--play-last); font-size: 18px; box-shadow: 0 5px 16px #1873e655; }
+.recent-balls { display: grid; gap: 4px; min-width: 0; }
+.recent-balls small { font-size: 6px; letter-spacing: .1em; white-space: nowrap; color: #b7ded3; }
+.recent-balls > div { display: flex; align-items: center; gap: 5px; }
+.recent-balls b { width: 28px; height: 28px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 50%; background: #ffffff16; border: 1px solid #ffffff26; color: #d8eee7; font-size: 12px; }
+.recent-balls b.current { width: 38px; height: 38px; background: var(--play-last); border: 0; color: white; font-size: 19px; box-shadow: 0 5px 16px #1873e655; }
 .board-hot { min-width: 0; display: grid; grid-template-columns: auto 1fr; column-gap: 6px; align-content: center; text-align: left; }
 .board-hot > b { grid-row: 1 / 3; align-self: center; color: #ff9b66; font-size: 10px; white-space: nowrap; }
 .board-hot span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 7px; color: #d8eee7; }
@@ -1135,5 +1137,10 @@ button {
 .color-options label > span { display: grid; }
 .color-options small { color: #768179; }
 .color-options input { width: 48px; height: 36px; border: 0; padding: 0; background: none; }
+.color-pair { display: flex; gap: 5px; }
+.gradient-toggle { min-height: 56px; margin-top: 12px; padding: 9px 12px; display: flex; justify-content: space-between; align-items: center; border-radius: 14px; background: #ece7ff; }
+.gradient-toggle > span { display: grid; }
+.gradient-toggle small { color: #6d6682; }
+.gradient-toggle input { width: 22px; height: 22px; accent-color: #7157d9; }
 .theme-done { width: 100%; }
 .theme-reset { width: 100%; margin-top: 13px; border: 0; background: none; color: #67558b; font-weight: 700; }
