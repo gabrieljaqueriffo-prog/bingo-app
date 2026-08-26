@@ -14,7 +14,7 @@ import {
   type Role,
   type RoomRow,
 } from "./remote";
-import { isSupabaseConfigured } from "../../lib/supabase";
+import { isSupabaseConfigured, supabaseKeyError } from "../../lib/supabase";
 import "./conecta4.css";
 
 type Screen = "menu" | "waiting" | "play";
@@ -37,11 +37,15 @@ function Unconfigured({ onExit }: { onExit: () => void }) {
       <section className="c4-hero">
         <Users size={56} />
         <h2>Modo online sin configurar</h2>
-        <p>
-          Para jugar entre celulares hace falta conectar Supabase (gratis).
-          Creá el proyecto en supabase.com, ejecutá el SQL de la tabla
-          <code> rooms </code> y completá el archivo <code>.env</code>.
-        </p>
+        {supabaseKeyError ? (
+          <p className="c4-error">{supabaseKeyError}</p>
+        ) : (
+          <p>
+            Para jugar entre celulares hace falta conectar Supabase (gratis).
+            Creá el proyecto en supabase.com, ejecutá el SQL de la tabla
+            <code> rooms </code> y completá el archivo <code>.env</code>.
+          </p>
+        )}
       </section>
     </main>
   );
