@@ -1,0 +1,104 @@
+.stop {
+  min-height: 100dvh;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  background: linear-gradient(180deg, #123423 0%, #08170f 100%);
+  color: #e9fbe8;
+}
+.st-head {
+  display: flex; align-items: center; justify-content: space-between; gap: .75rem;
+}
+.st-head h1 { font-size: 1.25rem; margin: 0; letter-spacing: .04em; }
+.st-head button {
+  background: rgba(255,255,255,.08); border: none; color: inherit;
+  width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
+}
+.st-head button:hover { background: rgba(255,255,255,.15); }
+.stop .eyebrow { font-size: 11px; letter-spacing: .17em; font-weight: 700; color: #ffd97a; }
+
+.st-hero, .st-waiting {
+  text-align: center; padding: 2rem 1rem;
+  background: rgba(255,255,255,.04); border-radius: 24px;
+  border: 1px solid rgba(255,255,255,.08);
+}
+.st-hero h2 { margin: .25rem 0 .75rem; font-size: 1.5rem; }
+.st-hero p { color: #c3e0bd; margin: 0 0 .5rem; }
+.st-hero .primary { margin-top: .5rem; }
+.st-code {
+  font: 700 44px Fraunces, serif; letter-spacing: .22em; margin-left: .22em;
+  color: #ffd97a;
+}
+
+.st-form { display: flex; flex-direction: column; gap: .75rem; }
+.st-form label { display: flex; flex-direction: column; gap: .35rem; }
+.st-form input {
+  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1);
+  color: inherit; padding: .75rem 1rem; border-radius: 12px; font-size: 1rem;
+}
+.stop .primary {
+  background: linear-gradient(135deg, #2f9e6d, #62d19b); color: white; border: none;
+  padding: 1rem; border-radius: 14px; font-size: 1.05rem; font-weight: 600;
+  display: flex; align-items: center; justify-content: center; gap: .5rem;
+}
+.stop .primary:disabled { opacity: .4; }
+.st-error {
+  text-align: center; color: #ffb9a6; background: rgba(239,93,93,.12);
+  border: 1px solid rgba(239,93,93,.35); border-radius: 12px; padding: .6rem .9rem;
+}
+
+.st-score { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+.stop .score {
+  background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08);
+  border-radius: 16px; padding: .75rem; text-align: center;
+}
+.stop .score.me { border-color: #62d19b; box-shadow: 0 0 0 2px rgba(98,209,155,.25); }
+.stop .score b { display: block; }
+.pts {
+  font: 800 28px Fraunces, serif; color: #ffd97a;
+}
+.pts-1 { color: #ff9fc7; }
+
+.st-letterbar {
+  display: flex; align-items: center; justify-content: space-between;
+  background: rgba(255,217,122,.1); border: 1px solid rgba(255,217,122,.3);
+  border-radius: 16px; padding: .6rem 1rem;
+}
+.big-letter { font: 700 40px Fraunces, serif; color: #ffd97a; }
+.st-letterbar .meta { color: #c3e0bd; font-size: .95rem; }
+
+.st-writing { display: flex; flex-direction: column; gap: .55rem; }
+.st-writing label { display: grid; grid-template-columns: 110px 1fr; align-items: center; gap: .5rem; }
+.st-writing label.warn input { border-color: #ef5da8; }
+.st-writing label.warn b { color: #ff9fc7; }
+.st-writing input {
+  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1);
+  color: inherit; padding: .65rem .8rem; border-radius: 11px; font-size: 1rem;
+}
+.st-writing .primary { margin-top: .5rem; }
+.st-waiting p { margin: .3rem 0; color: #c3e0bd; }
+
+.round-result {
+  text-align: center; background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.1); border-radius: 14px; padding: .7rem;
+}
+.round-result small { display: block; color: #9db89b; margin-top: .2rem; }
+
+.review-table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+.review-table th, .review-table td {
+  text-align: left; padding: .45rem .4rem; border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.review-table td.dup { color: #ff9fc7; font-weight: 600; }
+.review-table th { color: #9db89b; font-weight: 600; }
+
+.st-final {
+  text-align: center; padding: 2rem 1rem; display: flex; flex-direction: column;
+  align-items: center; gap: .5rem; background: rgba(255,217,122,.08);
+  border: 1px solid rgba(255,217,122,.35); border-radius: 24px;
+}
+.st-final h2 { margin: 0; font-size: 1.6rem; }
+.st-final p { margin: 0; color: #c3e0bd; }
+.final-scores { font-size: 1.2rem; display: flex; align-items: center; gap: .5rem; }
+.st-final .meta { font-size: .85rem; color: #9db89b; }
+.st-final .primary { width: 100%; max-width: 280px; margin-top: .75rem; }
