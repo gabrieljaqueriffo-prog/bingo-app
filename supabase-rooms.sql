@@ -20,3 +20,4 @@ alter table public.rooms enable row level security;
 create policy "salas legibles" on public.rooms for select using (true);
 create policy "salas creables" on public.rooms for insert with check (true);
 create policy "salas editables" on public.rooms for update using (true);
+create policy "salas borrables" on public.rooms for delete using (true);
