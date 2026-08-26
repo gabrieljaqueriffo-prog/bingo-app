@@ -19,7 +19,7 @@ type LocalState = SetupState | PlayState;
 
 const faces: Face[] = [1, 2, 3, 4, 5, 6];
 
-const faceLabel = (face: Face) =>
+export const faceLabel = (face: Face) =>
   face === 1 ? "As (comodín)" : `${face}`;
 
 export default function MentirosoApp({ onExit }: { onExit: () => void }) {
@@ -161,7 +161,7 @@ function Play({
   );
 }
 
-function Scoreboard({ state, meId }: { state: GameState; meId: string }) {
+export function Scoreboard({ state, meId }: { state: GameState; meId: string }) {
   return (
     <div className="scoreboard">
       {state.players.map((p) => (
@@ -179,7 +179,7 @@ function Scoreboard({ state, meId }: { state: GameState; meId: string }) {
   );
 }
 
-function TurnBanner({
+export function TurnBanner({
   state,
   me,
   rival,
@@ -202,7 +202,7 @@ function TurnBanner({
   );
 }
 
-function PlayerBlock({
+export function PlayerBlock({
   name,
   dice,
   isCurrentTurn,
@@ -270,7 +270,7 @@ function ActionPanel({
   return <BidForm current={state.currentBid} onBid={onBid} onChallenge={onChallenge} />;
 }
 
-function BidForm({
+export function BidForm({
   current,
   onBid,
   onChallenge,
@@ -329,7 +329,7 @@ function BidForm({
   );
 }
 
-function WinnerBanner({ name, onAgain }: { name: string; onAgain: () => void }) {
+export function WinnerBanner({ name, onAgain }: { name: string; onAgain: () => void }) {
   return (
     <div className="winner-banner">
       <Dice5 size={48} />
@@ -342,7 +342,7 @@ function WinnerBanner({ name, onAgain }: { name: string; onAgain: () => void }) 
   );
 }
 
-function Log({ entries }: { entries: string[] }) {
+export function Log({ entries }: { entries: string[] }) {
   if (entries.length < 2) return null;
   return (
     <details className="log">

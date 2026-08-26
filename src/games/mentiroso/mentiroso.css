@@ -7,6 +7,12 @@
   background: linear-gradient(180deg, #1a1330 0%, #0e0a1c 100%);
   color: #f4ecff;
 }
+.room-code-ment {
+  font: 700 44px Fraunces, serif;
+  letter-spacing: 0.22em;
+  margin: 0.75rem 0 0.75rem 0.22em;
+  color: #b9a3ff;
+}
 .mentiroso-head {
   display: flex;
   align-items: center;

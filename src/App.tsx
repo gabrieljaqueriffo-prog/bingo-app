@@ -52,8 +52,10 @@ import Conecta4RemoteApp from "./games/conecta4/Conecta4RemoteApp";
 import { parseRoomLink } from "./games/conecta4/remote";
 import StopRemoteApp from "./games/stop/StopRemoteApp";
 import { parseStopLink } from "./games/stop/stopRemote";
+import MentirosoRemoteApp from "./games/mentiroso/MentirosoRemoteApp";
+import { parseMentLink } from "./games/mentiroso/mentRemote";
 
-type View = "loading" | "home" | "games" | "verify" | "play" | "pick" | "mentiroso" | "conecta4" | "conecta4-online" | "stop-online";
+type View = "loading" | "home" | "games" | "verify" | "play" | "pick" | "mentiroso" | "mentiroso-online" | "conecta4" | "conecta4-online" | "stop-online";
 type CardView = "all" | "four" | "one";
 type PlayTheme = { marked: string; marked2: string; last: string; last2: string; modality: string; modality2: string; gradient: boolean };
 const defaultTheme: PlayTheme = { marked: "#ffc94a", marked2: "#ff9f2e", last: "#318df0", last2: "#705cff", modality: "#8b6cf6", modality2: "#ef5da8", gradient: true };
@@ -66,7 +68,7 @@ const makeCard = (
 
 export default function App() {
   const [view, setView] = useState<View>(() =>
-    parseStopLink() ? "stop-online" : parseRoomLink() ? "conecta4-online" : "loading",
+    parseMentLink() ? "mentiroso-online" : parseStopLink() ? "stop-online" : parseRoomLink() ? "conecta4-online" : "loading",
   ),
     [game, setGame] = useState<Game | null>(null),
     [games, setGames] = useState<Game[]>([]),
@@ -549,6 +551,8 @@ export default function App() {
             setView("conecta4-online");
           } else if (picked === "stop-online") {
             setView("stop-online");
+          } else if (picked === "mentiroso-online") {
+            setView("mentiroso-online");
           } else {
             start();
           }
@@ -556,6 +560,7 @@ export default function App() {
       />
     );
   if (view === "mentiroso") return <MentirosoApp onExit={() => setView("home")} />;
+  if (view === "mentiroso-online") return <MentirosoRemoteApp onExit={() => setView("home")} />;
   if (view === "conecta4") return <Conecta4App onExit={() => setView("home")} />;
   if (view === "conecta4-online") return <Conecta4RemoteApp onExit={() => setView("home")} />;
   if (view === "stop-online") return <StopRemoteApp onExit={() => setView("home")} />;
@@ -576,6 +581,7 @@ function Home({
   const games = [
     { id: "bingo", letter: "B", name: "Bingo 75", desc: "Cantá línea y carta", cls: "tile-bingo", icon: <Hash /> },
     { id: "mentiroso", letter: "M", name: "Mentiroso", desc: "Dados · ¿mentís o dudás?", cls: "tile-mentiroso", icon: <Dice5 /> },
+    { id: "mentiroso-online", letter: "MO", name: "Mentiroso Online", desc: "Dados ocultos, en tu celu", cls: "tile-mentiroso", icon: <Wifi /> },
     { id: "conecta4", letter: "4", name: "Conecta 4", desc: "Fichas · 4 en línea", cls: "tile-c4", icon: <Grid3X3 /> },
     { id: "conecta4-online", letter: "4G", name: "Conecta 4 Online", desc: "Cada uno en su celu", cls: "tile-c4o", icon: <Wifi /> },
     { id: "stop-online", letter: "S", name: "Stop", desc: "Letra + categorías, online", cls: "tile-stop", icon: <Timer /> },
@@ -615,7 +621,7 @@ function Home({
       </div>
 
       <section className="hero">
-        <p className="eyebrow">5 JUEGOS PARA JUGAR EN PAREJA</p>
+        <p className="eyebrow">6 JUEGOS PARA JUGAR EN PAREJA</p>
         <h1 key={`t${tick % phrases.length}`} className="hero-swap">
           {current.title}
         </h1>
@@ -664,7 +670,7 @@ function Home({
   );
 }
 
-function GamePicker({ onPick, back }: { onPick: (game: "bingo" | "mentiroso" | "conecta4" | "conecta4-online" | "stop-online") => void; back: () => void }) {
+function GamePicker({ onPick, back }: { onPick: (game: "bingo" | "mentiroso" | "mentiroso-online" | "conecta4" | "conecta4-online" | "stop-online") => void; back: () => void }) {
   return (
     <main className="page">
       <PageHead title="Elegí un juego" back={back} />
@@ -682,6 +688,14 @@ function GamePicker({ onPick, back }: { onPick: (game: "bingo" | "mentiroso" | "
           <span>
             <b>Mentiroso</b>
             <small>Dados · 2 jugadores · un dispositivo</small>
+          </span>
+          <ChevronRight />
+        </button>
+        <button onClick={() => onPick("mentiroso-online")}>
+          <span className="mini-ball">MG</span>
+          <span>
+            <b>Mentiroso Online</b>
+            <small>Dados ocultos · cada uno desde su celular</small>
           </span>
           <ChevronRight />
         </button>
