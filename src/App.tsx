@@ -10,6 +10,9 @@ import {
   Hash,
   History,
   ImagePlus,
+  Dice5,
+  Timer,
+  Wifi,
   MoreHorizontal,
   Mic,
   MicOff,
@@ -185,60 +188,16 @@ export default function App() {
     return (
       <main className="splash">
         <div className="logo-ball">B</div>
-        <p>Preparando tus cartones…</p>
+        <p>Preparando la mesita…</p>
       </main>
     );
   if (view === "home")
-    return (
-      <main className="home">
-        <header className="brand">
-          <div className="logo-ball">B</div>
-          <span>Bingo</span>
-        </header>
-        <section className="hero">
-          <p className="eyebrow">TUS CARTONES, SIEMPRE CONTIGO</p>
-          <h1>
-            Listos para cantar
-            <br />
-            <em>¡Bingo!</em>
-          </h1>
-          <p>
-            Fotografía tus cartones, revisa los números y juega sin perder una
-            sola marca.
-          </p>
-        </section>
-        <section className="home-actions">
-          <button className="primary" onClick={() => setView("pick")}>
-            <Plus /> Nueva partida <ChevronRight />
-          </button>
-          {game && (
-            <button className="continue" onClick={() => setView("play")}>
-              <span>
-                <Clock3 />
-                <b>Continuar partida</b>
-                <small>
-                  {game.name} · {game.calledNumbers.length} marcados
-                </small>
-              </span>
-              <ChevronRight />
-            </button>
-          )}
-          <button className="text-button" onClick={() => setView("games")}>
-            <History /> Mis partidas
-          </button>
-        </section>
-        <footer>
-          <span>Guardado en este dispositivo</span>
-          <button
-            onClick={() =>
-              navigator.share?.({ title: "Bingo", url: location.href })
-            }
-          >
-            <Share2 /> Compartir app
-          </button>
-        </footer>
-      </main>
-    );
+    return <Home
+      game={game}
+      setView={setView}
+      onBingo={start}
+      onShare={() => navigator.share?.({ title: "Mesita · Juegos para dos", url: location.href })}
+    />;
   if (view === "games")
     return (
       <main className="page">
@@ -601,6 +560,108 @@ export default function App() {
   if (view === "conecta4-online") return <Conecta4RemoteApp onExit={() => setView("home")} />;
   if (view === "stop-online") return <StopRemoteApp onExit={() => setView("home")} />;
   return null;
+}
+
+function Home({
+  game,
+  setView,
+  onBingo,
+  onShare,
+}: {
+  game: Game | null;
+  setView: (view: View) => void;
+  onBingo: () => void;
+  onShare: () => void;
+}) {
+  const games = [
+    { id: "bingo", letter: "B", name: "Bingo 75", desc: "Cantá línea y carta", cls: "tile-bingo", icon: <Hash /> },
+    { id: "mentiroso", letter: "M", name: "Mentiroso", desc: "Dados · ¿mentís o dudás?", cls: "tile-mentiroso", icon: <Dice5 /> },
+    { id: "conecta4", letter: "4", name: "Conecta 4", desc: "Fichas · 4 en línea", cls: "tile-c4", icon: <Grid3X3 /> },
+    { id: "conecta4-online", letter: "4G", name: "Conecta 4 Online", desc: "Cada uno en su celu", cls: "tile-c4o", icon: <Wifi /> },
+    { id: "stop-online", letter: "S", name: "Stop", desc: "Letra + categorías, online", cls: "tile-stop", icon: <Timer /> },
+  ] as const;
+
+  // Frase que va rotando entre los juegos, con la pelotita saltando.
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 1800);
+    return () => clearInterval(id);
+  }, []);
+  const phrases = [
+    { letter: "B", title: <>Cantá <em>¡bingo!</em></>, sub: "Tus cartones, siempre contigo" },
+    { letter: "M", title: <>¿Mentís o <em>dudás?</em></>, sub: "El dado no perdona al mentiroso" },
+    { letter: "4", title: <>Conectá <em>cuatro</em></>, sub: "En fila, columna o diagonal" },
+    { letter: "S", title: <>¡<em>Stop!</em> Se terminó el tiempo</>, sub: "Nombre, animal, comida…" },
+  ];
+  const current = phrases[tick % phrases.length];
+
+  return (
+    <main className="home">
+      <header className="brand">
+        <div className="logo-ball ball-cycle" key={current.letter}>{current.letter}</div>
+        <span>Mesita</span>
+      </header>
+
+      <div className="float-balls" aria-hidden>
+        {games.map((g, i) => (
+          <span
+            key={g.letter}
+            className={`mini-ball2 ${g.cls}`}
+            style={{ top: `${i * 52}px`, animationDelay: `${i * 0.35}s` }}
+          >
+            {g.letter}
+          </span>
+        ))}
+      </div>
+
+      <section className="hero">
+        <p className="eyebrow">5 JUEGOS PARA JUGAR EN PAREJA</p>
+        <h1 key={`t${tick % phrases.length}`} className="hero-swap">
+          {current.title}
+        </h1>
+        <p key={`s${tick % phrases.length}`} className="hero-sub-swap">{current.sub}</p>
+      </section>
+
+      <section className="home-games">
+        {games.map((g) => (
+          <button
+            key={g.id}
+            className={`game-tile ${g.cls}`}
+            onClick={() => (g.id === "bingo" ? onBingo() : setView(g.id as View))}
+          >
+            <span className="tile-icon">{g.icon}</span>
+            <span className="tile-text">
+              <b>{g.name}</b>
+              <small>{g.desc}</small>
+            </span>
+            <ChevronRight />
+          </button>
+        ))}
+      </section>
+
+      {game && (
+        <section className="home-actions">
+          <button className="continue" onClick={() => setView("play")}>
+            <span>
+              <Clock3 />
+              <b>Continuar tu bingo</b>
+              <small>{game.name} · {game.calledNumbers.length} marcados</small>
+            </span>
+            <ChevronRight />
+          </button>
+        </section>
+      )}
+
+      <footer>
+        <button className="text-button" onClick={() => setView("games")}>
+          <History /> Mis partidas guardadas
+        </button>
+        <button onClick={onShare}>
+          <Share2 /> Compartir
+        </button>
+      </footer>
+    </main>
+  );
 }
 
 function GamePicker({ onPick, back }: { onPick: (game: "bingo" | "mentiroso" | "conecta4" | "conecta4-online" | "stop-online") => void; back: () => void }) {

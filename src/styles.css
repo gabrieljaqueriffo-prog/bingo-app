@@ -53,10 +53,15 @@ button {
     max(18px, env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
+  position: relative;
+  overflow: hidden;
   background:
     radial-gradient(circle at 90% 6%, #ecdba9 0 1px, transparent 2px) 0 0/18px
       18px,
     var(--cream);
+}
+.home > .hero {
+  margin: 6px 0 22px;
 }
 .brand {
   display: flex;
@@ -161,6 +166,114 @@ button {
 }
 .home footer svg {
   width: 14px;
+}
+.home footer {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* --- Nueva home "Mesita" --- */
+.logo-ball.ball-cycle {
+  animation: ball-bounce 1.8s ease-in-out infinite alternate;
+}
+@keyframes ball-bounce {
+  from { transform: translateY(0) rotate(-8deg); }
+  to   { transform: translateY(-5px) rotate(8deg); }
+}
+
+.float-balls {
+  position: absolute;
+  right: 14px;
+  top: 84px;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.mini-ball2 {
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font: 800 15px Fraunces;
+  color: white;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.15);
+  animation: float-tile 3.6s ease-in-out infinite alternate;
+}
+@keyframes float-tile {
+  from { transform: translate(0, 0) rotate(-6deg); }
+  to   { transform: translate(-12px, -14px) rotate(8deg); }
+}
+.tile-bingo    { background: #e8b83d; }
+.tile-mentiroso{ background: #7e4dff; }
+.tile-c4       { background: #2e7cf6; }
+.tile-c4o      { background: #10a28a; }
+.tile-stop     { background: #2f9e6d; }
+
+.hero-swap {
+  animation: hero-in 0.45s ease both;
+}
+.hero-sub-swap {
+  animation: hero-in 0.45s ease both;
+}
+@keyframes hero-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.home-games {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+}
+.game-tile {
+  border: 1px solid var(--line);
+  background: #fffaf0;
+  border-radius: 16px;
+  min-height: 66px;
+  padding: 11px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.04);
+}
+.game-tile:hover { border-color: #bface0; }
+.game-tile:active { transform: scale(0.985); }
+.tile-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  color: white;
+  flex-shrink: 0;
+}
+.game-tile.tile-bingo .tile-icon     { background: #e8b83d; }
+.game-tile.tile-mentiroso .tile-icon { background: #7e4dff; }
+.game-tile.tile-c4 .tile-icon        { background: #2e7cf6; }
+.game-tile.tile-c4o .tile-icon       { background: #10a28a; }
+.game-tile.tile-stop .tile-icon      { background: #2f9e6d; }
+.tile-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+.tile-text b {
+  font-size: 1rem;
+  color: #183025;
+}
+.tile-text small {
+  color: #718078;
+  font-size: 0.82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.game-tile > svg:last-child {
+  color: #96a29b;
+  flex-shrink: 0;
 }
 .page {
   min-height: 100dvh;
