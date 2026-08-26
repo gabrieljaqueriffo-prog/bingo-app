@@ -179,3 +179,25 @@
 .winner-banner .eyebrow { color: #8fd0ff; margin: 0; }
 .winner-banner h2 { margin: 0; font-size: 1.75rem; }
 .winner-banner .primary { width: 100%; max-width: 280px; }
+
+.room-code {
+  font: 700 44px Fraunces, serif;
+  letter-spacing: 0.22em;
+  margin-left: 0.22em; /* compensa el tracking para centrar */
+  color: #8fd0ff;
+}
+.c4-error {
+  text-align: center;
+  color: #ff9fc2;
+  background: rgba(239, 61, 146, 0.12);
+  border: 1px solid rgba(239, 61, 146, 0.35);
+  border-radius: 12px;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.92rem;
+}
+.conecta4 code {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0.1rem 0.35rem;
+  border-radius: 6px;
+  font-size: 0.85em;
+}

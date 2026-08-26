@@ -45,8 +45,10 @@ import { getGame, getLastGame, listGames, saveGame } from "./db";
 import type { Card, Cell, Game, ParsedCard } from "./types";
 import MentirosoApp from "./games/mentiroso/MentirosoApp";
 import Conecta4App from "./games/conecta4/Conecta4App";
+import Conecta4RemoteApp from "./games/conecta4/Conecta4RemoteApp";
+import { parseRoomLink } from "./games/conecta4/remote";
 
-type View = "loading" | "home" | "games" | "verify" | "play" | "pick" | "mentiroso" | "conecta4";
+type View = "loading" | "home" | "games" | "verify" | "play" | "pick" | "mentiroso" | "conecta4" | "conecta4-online";
 type CardView = "all" | "four" | "one";
 type PlayTheme = { marked: string; marked2: string; last: string; last2: string; modality: string; modality2: string; gradient: boolean };
 const defaultTheme: PlayTheme = { marked: "#ffc94a", marked2: "#ff9f2e", last: "#318df0", last2: "#705cff", modality: "#8b6cf6", modality2: "#ef5da8", gradient: true };
@@ -58,7 +60,9 @@ const makeCard = (
 ): Card => ({ id: crypto.randomUUID(), gameId, label: `Cartón ${n}`, rows });
 
 export default function App() {
-  const [view, setView] = useState<View>("loading"),
+  const [view, setView] = useState<View>(() =>
+    parseRoomLink() ? "conecta4-online" : "loading",
+  ),
     [game, setGame] = useState<Game | null>(null),
     [games, setGames] = useState<Game[]>([]),
     [draft, setDraft] = useState<Card[]>([]),
@@ -580,6 +584,8 @@ export default function App() {
             setView("mentiroso");
           } else if (picked === "conecta4") {
             setView("conecta4");
+          } else if (picked === "conecta4-online") {
+            setView("conecta4-online");
           } else {
             start();
           }
@@ -588,10 +594,11 @@ export default function App() {
     );
   if (view === "mentiroso") return <MentirosoApp onExit={() => setView("home")} />;
   if (view === "conecta4") return <Conecta4App onExit={() => setView("home")} />;
+  if (view === "conecta4-online") return <Conecta4RemoteApp onExit={() => setView("home")} />;
   return null;
 }
 
-function GamePicker({ onPick, back }: { onPick: (game: "bingo" | "mentiroso" | "conecta4") => void; back: () => void }) {
+function GamePicker({ onPick, back }: { onPick: (game: "bingo" | "mentiroso" | "conecta4" | "conecta4-online") => void; back: () => void }) {
   return (
     <main className="page">
       <PageHead title="Elegí un juego" back={back} />
@@ -617,6 +624,14 @@ function GamePicker({ onPick, back }: { onPick: (game: "bingo" | "mentiroso" | "
           <span>
             <b>Conecta 4</b>
             <small>Fichas · 2 jugadores · conectá cuatro en línea</small>
+          </span>
+          <ChevronRight />
+        </button>
+        <button onClick={() => onPick("conecta4-online")}>
+          <span className="mini-ball">4G</span>
+          <span>
+            <b>Conecta 4 Online</b>
+            <small>De acá a la sala: cada uno desde su celular</small>
           </span>
           <ChevronRight />
         </button>
