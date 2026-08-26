@@ -44,8 +44,9 @@ import {
 import { getGame, getLastGame, listGames, saveGame } from "./db";
 import type { Card, Cell, Game, ParsedCard } from "./types";
 import MentirosoApp from "./games/mentiroso/MentirosoApp";
+import Conecta4App from "./games/conecta4/Conecta4App";
 
-type View = "loading" | "home" | "games" | "verify" | "play" | "pick" | "mentiroso";
+type View = "loading" | "home" | "games" | "verify" | "play" | "pick" | "mentiroso" | "conecta4";
 type CardView = "all" | "four" | "one";
 type PlayTheme = { marked: string; marked2: string; last: string; last2: string; modality: string; modality2: string; gradient: boolean };
 const defaultTheme: PlayTheme = { marked: "#ffc94a", marked2: "#ff9f2e", last: "#318df0", last2: "#705cff", modality: "#8b6cf6", modality2: "#ef5da8", gradient: true };
@@ -577,6 +578,8 @@ export default function App() {
         onPick={(picked) => {
           if (picked === "mentiroso") {
             setView("mentiroso");
+          } else if (picked === "conecta4") {
+            setView("conecta4");
           } else {
             start();
           }
@@ -584,10 +587,11 @@ export default function App() {
       />
     );
   if (view === "mentiroso") return <MentirosoApp onExit={() => setView("home")} />;
+  if (view === "conecta4") return <Conecta4App onExit={() => setView("home")} />;
   return null;
 }
 
-function GamePicker({ onPick, back }: { onPick: (game: "bingo" | "mentiroso") => void; back: () => void }) {
+function GamePicker({ onPick, back }: { onPick: (game: "bingo" | "mentiroso" | "conecta4") => void; back: () => void }) {
   return (
     <main className="page">
       <PageHead title="Elegí un juego" back={back} />
@@ -605,6 +609,14 @@ function GamePicker({ onPick, back }: { onPick: (game: "bingo" | "mentiroso") =>
           <span>
             <b>Mentiroso</b>
             <small>Dados · 2 jugadores · un dispositivo</small>
+          </span>
+          <ChevronRight />
+        </button>
+        <button onClick={() => onPick("conecta4")}>
+          <span className="mini-ball">4</span>
+          <span>
+            <b>Conecta 4</b>
+            <small>Fichas · 2 jugadores · conectá cuatro en línea</small>
           </span>
           <ChevronRight />
         </button>
