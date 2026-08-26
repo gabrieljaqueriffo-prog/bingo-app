@@ -43,8 +43,9 @@ import {
 } from "./core";
 import { getGame, getLastGame, listGames, saveGame } from "./db";
 import type { Card, Cell, Game, ParsedCard } from "./types";
+import MentirosoApp from "./games/mentiroso/MentirosoApp";
 
-type View = "loading" | "home" | "games" | "verify" | "play";
+type View = "loading" | "home" | "games" | "verify" | "play" | "pick" | "mentiroso";
 type CardView = "all" | "four" | "one";
 type PlayTheme = { marked: string; marked2: string; last: string; last2: string; modality: string; modality2: string; gradient: boolean };
 const defaultTheme: PlayTheme = { marked: "#ffc94a", marked2: "#ff9f2e", last: "#318df0", last2: "#705cff", modality: "#8b6cf6", modality2: "#ef5da8", gradient: true };
@@ -200,7 +201,7 @@ export default function App() {
           </p>
         </section>
         <section className="home-actions">
-          <button className="primary" onClick={() => start()}>
+          <button className="primary" onClick={() => setView("pick")}>
             <Plus /> Nueva partida <ChevronRight />
           </button>
           {game && (
@@ -569,7 +570,47 @@ export default function App() {
       </main>
     );
   }
+  if (view === "pick")
+    return (
+      <GamePicker
+        back={() => setView("home")}
+        onPick={(picked) => {
+          if (picked === "mentiroso") {
+            setView("mentiroso");
+          } else {
+            start();
+          }
+        }}
+      />
+    );
+  if (view === "mentiroso") return <MentirosoApp onExit={() => setView("home")} />;
   return null;
+}
+
+function GamePicker({ onPick, back }: { onPick: (game: "bingo" | "mentiroso") => void; back: () => void }) {
+  return (
+    <main className="page">
+      <PageHead title="Elegí un juego" back={back} />
+      <div className="games-list">
+        <button onClick={() => onPick("bingo")}>
+          <span className="mini-ball">B</span>
+          <span>
+            <b>Bingo 75 bolas</b>
+            <small>Cartones fotográficos, marcado global, modalidades</small>
+          </span>
+          <ChevronRight />
+        </button>
+        <button onClick={() => onPick("mentiroso")}>
+          <span className="mini-ball">M</span>
+          <span>
+            <b>Mentiroso</b>
+            <small>Dados · 2 jugadores · un dispositivo</small>
+          </span>
+          <ChevronRight />
+        </button>
+      </div>
+    </main>
+  );
 }
 
 function PageHead({ title, back }: { title: string; back: () => void }) {
