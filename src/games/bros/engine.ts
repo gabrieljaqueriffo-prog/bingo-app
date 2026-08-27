@@ -46,6 +46,8 @@ export type Phase = "lobby" | "playing" | "finished";
 
 export type BrosMode = "race" | "coins" | "lives" | "coop" | "temple";
 export const COIN_GOAL = 8;
+// Cantidad de etapas en los modos cooperativos (Cooperación y El Templo).
+export const MAX_LEVELS = 3;
 
 export interface BrosGameState {
   players: BrosPlayer[];
@@ -53,6 +55,7 @@ export interface BrosGameState {
   phase: Phase;
   winner: PlayerId | null;
   mode: BrosMode;
+  level: number; // etapa actual (1..MAX_LEVELS en los modos con etapas)
 }
 
 const GROUND_Y = SCREEN_HEIGHT - 32;
@@ -100,54 +103,67 @@ function livesTiles(): BrosTile[] {
   ];
 }
 
-// Cooperación: una compuerta que solo se abre mientras alguien pisa una placa.
-// Solo no la podés cruzar: uno sostiene la placa, el otro pasa, y después se turnan.
-function coopTiles(): BrosTile[] {
-  return [
-    ...groundSegment(0, SCREEN_WIDTH),
-    { type: "plate", x: 240, y: GROUND_Y - 12, w: 56, h: 12, pair: 1 },
-    { type: "gate", x: 400, y: 250, w: 16, h: GROUND_Y - 250, pair: 1 },
-    { type: "plate", x: 600, y: GROUND_Y - 12, w: 56, h: 12, pair: 1 },
-    platform(440, 380, 160),
-    platform(660, 240, 100),
-    flagTile,
-    coin(320, 300),
-    coin(520, 340),
-    coin(700, 200),
-  ];
+// Cooperación: compuertas que solo se abren mientras alguien pisa la placa.
+// Cada etapa suma una compuerta más (más trabajo en equipo).
+function coopTiles(level: number): BrosTile[] {
+  const pairs = Math.min(3, 1 + level); // lvl1:2, lvl2:3, lvl3:3(compuertas bien altas)
+  const tiles: BrosTile[] = [...groundSegment(0, SCREEN_WIDTH)];
+  let gx = 400;
+  for (let i = 1; i <= pairs; i++) {
+    const px = 220 + (i - 1) * 130;
+    const gy = 240 + (i % 2) * 40;
+    tiles.push({ type: "plate", x: px, y: GROUND_Y - 12, w: 56, h: 12, pair: i });
+    tiles.push({ type: "gate", x: gx, y: gy, w: 16, h: GROUND_Y - gy, pair: i });
+    gx += 120;
+  }
+  tiles.push(platform(470, 380, 120), platform(660, 240, 100), flagTile);
+  tiles.push(coin(320, 300), coin(520, 340), coin(700, 200));
+  return tiles;
 }
 
-// El Templo Perdido: cooperación con historia. Un explorador entra a la
-// Cueva de los Ecos; el otro queda afuera pisando los sellos antiguos que
-// abren —una por una— las puertas del interior. Solo juntos despiertan al
-// Trofeo Dorado de la Mesita.
-function templeTiles(): BrosTile[] {
-  return [
-    ...groundSegment(0, SCREEN_WIDTH),
-    // Sellos del exterior
-    { type: "plate", x: 240, y: GROUND_Y - 12, w: 56, h: 12, pair: 1 },
-    { type: "plate", x: 120, y: GROUND_Y - 12, w: 56, h: 12, pair: 2 },
-    // Entrada de la cueva (se abre con el Sello del Sol)
-    { type: "gate", x: 430, y: 200, w: 16, h: GROUND_Y - 200, pair: 1 },
-    // Puerta del corredor (se abre con el Espejo de la Luna)
-    { type: "gate", x: 520, y: 250, w: 16, h: GROUND_Y - 250, pair: 2 },
-    // El Canto de la Runa (interior): abre la cámara del trofeo
-    { type: "plate", x: 565, y: GROUND_Y - 12, w: 44, h: 12, pair: 3 },
-    { type: "gate", x: 640, y: 250, w: 16, h: GROUND_Y - 250, pair: 3 },
-    // El Trofeo Dorado de la Mesita
-    { type: "flag", x: 750, y: 384, w: 32, h: 64 },
-    platform(470, 380, 120),
-    coin(300, 380),
-    coin(480, 340),
-    coin(740, 330),
-  ];
+// El Templo Perdido: un explorador entra a la cueva, el otro queda afuera
+// pisando los sellos que abren —una a una— las puertas del interior. Cada
+// etapa es una cámara más profunda: más sellos y más compuertas que coordinar.
+function templeTiles(level: number): BrosTile[] {
+  const seals = Math.min(5, 2 + level); // lvl1:3, lvl2:4, lvl3:5
+  const tiles: BrosTile[] = [...groundSegment(0, SCREEN_WIDTH)];
+  // Sellos del exterior (afuera) y puertas hacia la penumbra.
+  for (let i = 1; i <= seals; i++) {
+    const px = 100 + (i - 1) * 50;
+    const gx = 410 + (i - 1) * 52;
+    tiles.push({ type: "plate", x: px, y: GROUND_Y - 12, w: 44, h: 12, pair: i });
+    tiles.push({ type: "gate", x: gx, y: 200 + (i % 2) * 30, w: 16, h: GROUND_Y - (200 + (i % 2) * 30), pair: i });
+  }
+  // El Canto de la Runa (interior): abre la cámara del trofeo.
+  tiles.push({ type: "plate", x: 560, y: GROUND_Y - 12, w: 44, h: 12, pair: seals + 1 });
+  tiles.push({ type: "gate", x: 700, y: 200, w: 16, h: GROUND_Y - 200, pair: seals + 1 });
+  // El Trofeo Dorado de la Mesita
+  tiles.push({ type: "flag", x: 750, y: 384, w: 32, h: 64 });
+  tiles.push(platform(470, 380, 120), platform(660, 240, 100));
+  tiles.push(coin(300, 380), coin(480, 340), coin(740, 330));
+  return tiles;
 }
 
-export function tilesForMode(mode: BrosMode): BrosTile[] {
+// Genera los tiles de una etapa. Los modos cooperativos varían con el nivel.
+export function tilesForLevel(mode: BrosMode, level: number = 1): BrosTile[] {
   if (mode === "lives") return livesTiles();
-  if (mode === "coop") return coopTiles();
-  if (mode === "temple") return templeTiles();
+  if (mode === "coop") return coopTiles(level);
+  if (mode === "temple") return templeTiles(level);
   return raceTiles();
+}
+
+// Reposiciona un jugador a su punto de partida (para cambiar de etapa).
+export function resetPlayer(p: BrosPlayer): BrosPlayer {
+  return {
+    ...p,
+    x: p.id === "red" ? 100 : 160,
+    y: 300,
+    vx: 0,
+    vy: 0,
+    onGround: false,
+    jumped: false,
+    anim: 0,
+  };
 }
 
 export const defaultPlayers: BrosPlayer[] = [
@@ -186,10 +202,11 @@ export const defaultPlayers: BrosPlayer[] = [
 export function createInitialGameState(mode: BrosMode = "race"): BrosGameState {
   return {
     players: defaultPlayers.map((p) => ({ ...p })),
-    tiles: tilesForMode(mode).map((t) => ({ ...t })),
+    tiles: tilesForLevel(mode, 1).map((t) => ({ ...t })),
     phase: "playing",
     winner: null,
     mode,
+    level: 1,
   };
 }
 

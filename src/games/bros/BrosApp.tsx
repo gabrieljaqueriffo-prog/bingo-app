@@ -5,10 +5,13 @@ import {
   applyGravity,
   collectCoins,
   COIN_GOAL,
+  MAX_LEVELS,
   createInitialGameState,
   platePressed,
   reachFlag,
+  resetPlayer,
   resolveCollisions,
+  tilesForLevel,
   type BrosGameState,
   type BrosMode,
   type BrosPlayer,
@@ -146,10 +149,13 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
       setRoom(updated);
       setGame((g) => {
         const mine = g.players.find((p) => p.id === selfIdRef.current);
+        // Si cambió de etapa, respete tu jugador al punto de partida del nivel nuevo.
+        const levelChanged = updated.state.level !== g.level;
+        const keep = mine && !levelChanged ? mine : updated.state.players.find((p) => p.id === selfIdRef.current);
         return {
           ...updated.state,
           players: updated.state.players.map((p) =>
-            p.id === selfIdRef.current && mine ? mine : p,
+            p.id === selfIdRef.current && keep ? keep : p,
           ),
         };
       });
@@ -180,21 +186,29 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
         let winner: PlayerId | null = g.winner;
         let phase: Phase = g.phase;
         if (me) {
-          if (g.mode === "race" && reachFlag(me, g.tiles)) {
+          const coopClear = g.mode === "coop" && foe && reachFlag(me, g.tiles) && reachFlag(foe, g.tiles);
+          const templeClear = g.mode === "temple" && reachFlag(me, g.tiles);
+          if (coopClear || templeClear) {
+            if (g.level < MAX_LEVELS) {
+              // Etapa superada → avanzar de nivel: nuevo mapa y ambos vuelven a salir.
+              const nextLevel = g.level + 1;
+              return {
+                ...g,
+                level: nextLevel,
+                tiles: tilesForLevel(g.mode, nextLevel).map((t) => ({ ...t })),
+                players: players.map(resetPlayer),
+                phase: "playing",
+                winner: null,
+              };
+            }
+            phase = "finished"; // último etapa: ganan juntos (winner null → ¡GANARON!)
+          } else if (g.mode === "race" && reachFlag(me, g.tiles)) {
             winner = me.id; phase = "finished";
-          }
-          if (g.mode === "coins" && me.coins >= COIN_GOAL) {
+          } else if (g.mode === "coins" && me.coins >= COIN_GOAL) {
             winner = me.id; phase = "finished";
-          }
-          if (g.mode === "lives" && foe) {
+          } else if (g.mode === "lives" && foe) {
             if (me.lives <= 0) { winner = foe.id; phase = "finished"; }
             if (foe.lives <= 0) { winner = me.id; phase = "finished"; }
-          }
-          if (g.mode === "coop" && foe && reachFlag(me, g.tiles) && reachFlag(foe, g.tiles)) {
-            phase = "finished"; // winner queda null → pantalla "¡GANARON!"
-          }
-          if (g.mode === "temple" && reachFlag(me, g.tiles)) {
-            phase = "finished"; // el trofeo despierta: ganan los dos
           }
         }
         return { ...g, players, winner, phase };
@@ -277,6 +291,13 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
           ctx.fillText("♥".repeat(Math.max(0, meNow.lives)) || "—", SCREEN_WIDTH - 10, 22);
         }
       }
+      // Indicador de etapa en los modos con progresión
+      if (g.mode === "coop" || g.mode === "temple") {
+        ctx.fillStyle = "rgba(255,255,255,.75)";
+        ctx.font = "12px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText(`ETAPA ${g.level}/${MAX_LEVELS}`, SCREEN_WIDTH / 2, 22);
+      }
       g.players.forEach(drawSprite);
       if (g.mode === "temple") {
         // Etiquetas de sellos, runa y trofeo
@@ -344,15 +365,15 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
   if (!room) {
     return (
       <div className="bros-lobby">
-        <h2>Super Bros Online</h2>
-        <p>¡Desafía a un amigo en este clásico juego de plataformas!</p>
+        <h2>El Dúo de la Mesita</h2>
+        <p>¡Aventura de plataformas en pareja, con etapas y historias!</p>
         <div className="bros-modes">
           {([
             ["race", "🏁 Carrera", "Llegá primero a la meta"],
             ["coins", "🪙 Monedas", "Primero en juntar 8 gana"],
             ["lives", "❤️ Vidas", "Con huecos: último en pie gana"],
-            ["coop", "🤝 Cooperación", "Placas: uno abre la puerta para el otro"],
-            ["temple", "🏛️ El Templo", "Cueva con historia: sellos afuera, runas adentro"],
+            ["coop", "🤝 Cooperación", "3 etapas: placas, uno abre para el otro"],
+            ["temple", "🏛️ El Templo", "Cueva con historia · 3 cámaras"],
           ] as [BrosMode, string, string][]).map(([id, name, desc]) => (
             <button
               key={id}
