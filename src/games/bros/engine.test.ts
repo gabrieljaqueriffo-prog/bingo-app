@@ -7,6 +7,10 @@ import {
   resolveCollisions,
   reachFlag,
   collectCoins,
+  makeLevel,
+  updateEnemies,
+  hitEnemy,
+  type Enemy,
   SCREEN_HEIGHT,
   MOVE_SPEED,
   JUMP_FORCE,
@@ -117,5 +121,31 @@ describe("Super Bros Engine", () => {
     expect(respawned.lives).toBe(2);
     expect(respawned.x).toBe(160);
     expect(respawned.y).toBe(300);
+  });
+
+  it("should spawn enemies and a final boss in temple level 3", () => {
+    const level3 = makeLevel("temple", 3, [basePlayer, { ...basePlayer, id: "blue", x: 160 }]);
+    expect(level3.enemies.length).toBe(3);
+    expect(level3.enemies.some((e) => e.boss)).toBe(true);
+    expect(level3.level).toBe(3);
+  });
+
+  it("should bounce enemies between their patrol limits", () => {
+    const enemies = updateEnemies([
+      { id: "x", x: 280, y: 0, w: 28, h: 40, minX: 280, maxX: 600, dir: 1, speed: 2, boss: false },
+      { id: "y", x: 598, y: 0, w: 28, h: 40, minX: 280, maxX: 600, dir: -1, speed: 2, boss: false },
+    ] as Enemy[]);
+    expect(enemies[0].x).toBeGreaterThan(280);
+    expect(enemies[1].x).toBeLessThan(598);
+  });
+
+  it("should detect a player hitting an enemy", () => {
+    const enemy = [
+      { id: "e", x: 300, y: 300, w: 28, h: 40, minX: 0, maxX: 800, dir: 1, speed: 2, boss: false },
+    ] as Enemy[];
+    const hit = { ...basePlayer, x: 305, y: 300 };
+    expect(hitEnemy(hit, enemy)).toBe(true);
+    const miss = { ...basePlayer, x: 500, y: 300 };
+    expect(hitEnemy(miss, enemy)).toBe(false);
   });
 });

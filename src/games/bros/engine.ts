@@ -56,6 +56,21 @@ export interface BrosGameState {
   winner: PlayerId | null;
   mode: BrosMode;
   level: number; // etapa actual (1..MAX_LEVELS en los modos con etapas)
+  enemies: Enemy[];
+  eTick: number; // paso de animación de los enemigos (determinista, compartido)
+}
+
+export interface Enemy {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  minX: number;
+  maxX: number;
+  dir: 1 | -1;
+  speed: number;
+  boss?: boolean;
 }
 
 const GROUND_Y = SCREEN_HEIGHT - 32;
@@ -166,6 +181,59 @@ export function resetPlayer(p: BrosPlayer): BrosPlayer {
   };
 }
 
+// Enemigos que patrullan de un lado a otro. Aparecen en los modos
+// cooperativos y crecen con la etapa; en la 3ª hay un jefe final más grande.
+export function enemiesForLevel(mode: BrosMode, level: number = 1): Enemy[] {
+  const base: Enemy[] = [];
+  if (mode === "coop") {
+    base.push({ id: "e1", x: 360, y: 380, w: 28, h: 40, minX: 280, maxX: 600, dir: -1, speed: 2, boss: false });
+    if (level >= 2) base.push({ id: "e2", x: 640, y: 320, w: 28, h: 40, minX: 560, maxX: 740, dir: 1, speed: 2.6, boss: false });
+    if (level >= 3) base.push({ id: "boss", x: 700, y: 256, w: 46, h: 66, minX: 640, maxX: 770, dir: -1, speed: 3, boss: true });
+  }
+  if (mode === "temple") {
+    base.push({ id: "g1", x: 520, y: 320, w: 26, h: 40, minX: 470, maxX: 660, dir: -1, speed: 2, boss: false });
+    if (level >= 2) base.push({ id: "g2", x: 580, y: 420, w: 26, h: 40, minX: 540, maxX: 720, dir: 1, speed: 2.6, boss: false });
+    if (level >= 3) base.push({ id: "boss", x: 700, y: 380, w: 46, h: 66, minX: 660, maxX: 780, dir: -1, speed: 3, boss: true });
+  }
+  return base;
+}
+
+// Avanza los enemigos un paso, rebotando entre sus límites. Determinista:
+// todos los clientes computan lo mismo a partir del estado compartido.
+export function updateEnemies(enemies: Enemy[]): Enemy[] {
+  return enemies.map((e) => {
+    let x = e.x + e.dir * e.speed;
+    let dir = e.dir;
+    if (x <= e.minX) { x = e.minX; dir = 1; }
+    if (x + e.w >= e.maxX) { x = e.maxX - e.w; dir = -1; }
+    return { ...e, x, dir };
+  });
+}
+
+// ¿Un jugador colisiona con un enemigo?
+export function hitEnemy(p: BrosPlayer, enemies: Enemy[]): boolean {
+  return enemies.some(
+    (e) =>
+      p.x < e.x + e.w && p.x + p.width > e.x &&
+      p.y < e.y + e.h && p.y + p.height > e.y,
+  );
+}
+
+// Reconstruye completo el estado de una etapa (mapa + enemigos + salida),
+// usado para avanzar de nivel o reiniciar la etapa tras perder todas las vidas.
+export function makeLevel(mode: BrosMode, level: number, players: BrosPlayer[]): BrosGameState {
+  return {
+    players: players.map((p) => ({ ...resetPlayer(p), lives: 3 })),
+    tiles: tilesForLevel(mode, level).map((t) => ({ ...t })),
+    enemies: enemiesForLevel(mode, level),
+    phase: "playing",
+    winner: null,
+    mode,
+    level,
+    eTick: 0,
+  };
+}
+
 export const defaultPlayers: BrosPlayer[] = [
   {
     id: "red",
@@ -203,10 +271,12 @@ export function createInitialGameState(mode: BrosMode = "race"): BrosGameState {
   return {
     players: defaultPlayers.map((p) => ({ ...p })),
     tiles: tilesForLevel(mode, 1).map((t) => ({ ...t })),
+    enemies: enemiesForLevel(mode, 1),
     phase: "playing",
     winner: null,
     mode,
     level: 1,
+    eTick: 0,
   };
 }
 

@@ -7,11 +7,14 @@ import {
   COIN_GOAL,
   MAX_LEVELS,
   createInitialGameState,
+  hitEnemy,
+  makeLevel,
   platePressed,
   reachFlag,
   resetPlayer,
   resolveCollisions,
-  tilesForLevel,
+  updateEnemies,
+  type Enemy,
   type BrosGameState,
   type BrosMode,
   type BrosPlayer,
@@ -172,12 +175,18 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
       setGame((g) => {
         if (g.phase !== "playing" || g.winner) return g;
         const dir = keysRef.current.values().next().value ?? null;
+        const enemies = updateEnemies(g.enemies);
+        const eTick = g.eTick + 1;
         const players = g.players.map((p) => {
           if (p.id !== selfIdRef.current) return p; // el rival llega por red
           let np = dir ? applyInput(p, dir) : applyInput(p, "stop");
           np = applyGravity(np);
           np = resolveCollisions(np, g.tiles);
           np = { ...np, x: np.x + np.vx };
+          // Chocar con un enemigo: perdés una vida y volvés a la salida.
+          if (hitEnemy(np, enemies)) {
+            np = { ...resetPlayer(np), lives: np.lives - 1 };
+          }
           const { player } = collectCoins(np, g.tiles);
           return player;
         });
@@ -190,16 +199,8 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
           const templeClear = g.mode === "temple" && reachFlag(me, g.tiles);
           if (coopClear || templeClear) {
             if (g.level < MAX_LEVELS) {
-              // Etapa superada → avanzar de nivel: nuevo mapa y ambos vuelven a salir.
-              const nextLevel = g.level + 1;
-              return {
-                ...g,
-                level: nextLevel,
-                tiles: tilesForLevel(g.mode, nextLevel).map((t) => ({ ...t })),
-                players: players.map(resetPlayer),
-                phase: "playing",
-                winner: null,
-              };
+              // Etapa superada → avanzar de nivel: mapa nuevo, enemigos nuevos, salimos los dos.
+              return makeLevel(g.mode, g.level + 1, players);
             }
             phase = "finished"; // último etapa: ganan juntos (winner null → ¡GANARON!)
           } else if (g.mode === "race" && reachFlag(me, g.tiles)) {
@@ -211,7 +212,7 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
             if (foe.lives <= 0) { winner = me.id; phase = "finished"; }
           }
         }
-        return { ...g, players, winner, phase };
+        return { ...g, players, winner, phase, enemies, eTick };
       });
     }, 1000 / 30);
     const commit = setInterval(() => {
@@ -299,6 +300,30 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
         ctx.fillText(`ETAPA ${g.level}/${MAX_LEVELS}`, SCREEN_WIDTH / 2, 22);
       }
       g.players.forEach(drawSprite);
+      // Enemigos: patrullan de un lado a otro; el jefe (etapa 3) es más grande.
+      g.enemies.forEach((e: Enemy) => {
+        const baseY = e.y;
+        const bobY = baseY + Math.sin((g.eTick + (parseInt(e.id.replace(/[^0-9]/g, "") || "0", 10) % 5)) / 6) * 2;
+        ctx.fillStyle = e.boss ? "#7b2fbe" : "#d6418f";
+        ctx.fillRect(e.x, bobY, e.w, e.h);
+        ctx.strokeStyle = "#1b0a24";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(e.x, bobY, e.w, e.h);
+        // ojos
+        ctx.fillStyle = "#fff";
+        const eyeY = bobY + e.h * 0.3;
+        ctx.fillRect(e.x + e.w * 0.22, eyeY, 5, 6);
+        ctx.fillRect(e.x + e.w * 0.62, eyeY, 5, 6);
+        ctx.fillStyle = "#000";
+        ctx.fillRect(e.x + e.w * 0.22 + (e.dir > 0 ? 2 : 0), eyeY, 2, 3);
+        ctx.fillRect(e.x + e.w * 0.62 + (e.dir > 0 ? 2 : 0), eyeY, 2, 3);
+        if (e.boss) {
+          ctx.fillStyle = "#ffd700";
+          ctx.font = "10px monospace";
+          ctx.textAlign = "center";
+          ctx.fillText("🎯 JEFE", e.x + e.w / 2, bobY + e.h + 12);
+        }
+      });
       if (g.mode === "temple") {
         // Etiquetas de sellos, runa y trofeo
         ctx.font = "10px monospace";
