@@ -590,7 +590,7 @@ function Home({
     { id: "conecta4-online", letter: "4G", name: "Conecta 4 Online", desc: "Cada uno en su celu", cls: "tile-c4o", icon: <Wifi /> },
     { id: "stop-online", letter: "S", name: "Stop", desc: "Letra + categorías, online", cls: "tile-stop", icon: <Timer /> },
         { id: "naval", letter: "N", name: "Batalla Naval", desc: "Hundí su flota, online", cls: "tile-naval", icon: <Ship /> },
-    { id: "bros", letter: "B", name: "El Dúo de la Mesita", desc: "Plataformas en pareja · coop online", cls: "tile-bros", icon: <Shapes /> },
+    { id: "bros", letter: "B", name: "Super Bros", desc: "Plataformas · online · coop con etapas", cls: "tile-bros", icon: <Shapes /> },
   ] as const;
 
   // Frase que va rotando entre los juegos, con la pelotita saltando.
@@ -724,8 +724,8 @@ function GamePicker({ onPick, back }: { onPick: (game: "bingo" | "mentiroso-onli
         <button onClick={() => onPick("bros")}>
           <span className="mini-ball">B</span>
           <span>
-            <b>El Dúo de la Mesita</b>
-            <small>Plataformas cooperativas · online · con historias</small>
+            <b>Super Bros</b>
+            <small>Plataformas · online · con etapas y enemigos</small>
           </span>
           <ChevronRight />
         </button>

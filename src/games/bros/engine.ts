@@ -46,7 +46,7 @@ export type Phase = "lobby" | "playing" | "finished";
 
 export type BrosMode = "race" | "coins" | "lives" | "coop" | "temple";
 export const COIN_GOAL = 8;
-// Cantidad de etapas en los modos cooperativos (Cooperación y El Templo).
+export const BOSS_HP = 3;
 export const MAX_LEVELS = 3;
 
 export interface BrosGameState {
@@ -71,6 +71,8 @@ export interface Enemy {
   dir: 1 | -1;
   speed: number;
   boss?: boolean;
+  hp?: number; // el jefe tiene vida: se lo golpea saltándole encima
+  stun?: number; // ticks de invulnerabilidad tras recibir un golpe (parpadea)
 }
 
 const GROUND_Y = SCREEN_HEIGHT - 32;
@@ -188,12 +190,12 @@ export function enemiesForLevel(mode: BrosMode, level: number = 1): Enemy[] {
   if (mode === "coop") {
     base.push({ id: "e1", x: 360, y: 380, w: 28, h: 40, minX: 280, maxX: 600, dir: -1, speed: 2, boss: false });
     if (level >= 2) base.push({ id: "e2", x: 640, y: 320, w: 28, h: 40, minX: 560, maxX: 740, dir: 1, speed: 2.6, boss: false });
-    if (level >= 3) base.push({ id: "boss", x: 700, y: 256, w: 46, h: 66, minX: 640, maxX: 770, dir: -1, speed: 3, boss: true });
+    if (level >= 3) base.push({ id: "boss", x: 700, y: 256, w: 46, h: 66, minX: 640, maxX: 770, dir: -1, speed: 3, boss: true, hp: BOSS_HP });
   }
   if (mode === "temple") {
     base.push({ id: "g1", x: 520, y: 320, w: 26, h: 40, minX: 470, maxX: 660, dir: -1, speed: 2, boss: false });
     if (level >= 2) base.push({ id: "g2", x: 580, y: 420, w: 26, h: 40, minX: 540, maxX: 720, dir: 1, speed: 2.6, boss: false });
-    if (level >= 3) base.push({ id: "boss", x: 700, y: 380, w: 46, h: 66, minX: 660, maxX: 780, dir: -1, speed: 3, boss: true });
+    if (level >= 3) base.push({ id: "boss", x: 700, y: 380, w: 46, h: 66, minX: 660, maxX: 780, dir: -1, speed: 3, boss: true, hp: BOSS_HP });
   }
   return base;
 }
@@ -206,17 +208,47 @@ export function updateEnemies(enemies: Enemy[]): Enemy[] {
     let dir = e.dir;
     if (x <= e.minX) { x = e.minX; dir = 1; }
     if (x + e.w >= e.maxX) { x = e.maxX - e.w; dir = -1; }
-    return { ...e, x, dir };
+    const stun = e.stun ? e.stun - 1 : 0;
+    return { ...e, x, dir, stun };
   });
 }
 
-// ¿Un jugador colisiona con un enemigo?
+// ¿Un jugador colisiona con un enemigo? (sin contar al jefe en su стun)
 export function hitEnemy(p: BrosPlayer, enemies: Enemy[]): boolean {
   return enemies.some(
     (e) =>
+      (e.stun ?? 0) <= 0 &&
       p.x < e.x + e.w && p.x + p.width > e.x &&
       p.y < e.y + e.h && p.y + p.height > e.y,
   );
+}
+
+// Salto encima de un enemigo: lo destruye (normal) o le saca vida al jefe.
+// Devuelve los enemigos actualizados y si hubo un "piso justo" (rebote).
+export function stompEnemy(
+  player: BrosPlayer,
+  enemies: Enemy[],
+): { enemies: Enemy[]; bounced: boolean } {
+  let bounced = false;
+  const next = enemies.map((e) => {
+    if ((e.stun ?? 0) > 0) return e; // no se puede golpear mientras se recupera
+    const touchX = player.x < e.x + e.w && player.x + player.width > e.x;
+    const falling = player.vy > 0;
+    const feetJustAbove =
+      player.y + player.height >= e.y &&
+      player.y + player.height <= e.y + e.h * 0.65;
+    if (touchX && falling && feetJustAbove) {
+      bounced = true;
+      if (e.boss) {
+        const nhp = (e.hp ?? 1) - 1;
+        if (nhp <= 0) return null; // muerto
+        return { ...e, hp: nhp, stun: 24 };
+      }
+      return null; // enemigo normal: muere al pisarlo
+    }
+    return e;
+  }).filter((e): e is Enemy => e !== null);
+  return { enemies: next, bounced };
 }
 
 // Reconstruye completo el estado de una etapa (mapa + enemigos + salida),

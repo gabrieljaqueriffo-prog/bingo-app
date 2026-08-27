@@ -5,6 +5,7 @@ import {
   applyGravity,
   collectCoins,
   COIN_GOAL,
+  BOSS_HP,
   MAX_LEVELS,
   createInitialGameState,
   hitEnemy,
@@ -13,6 +14,7 @@ import {
   reachFlag,
   resetPlayer,
   resolveCollisions,
+  stompEnemy,
   updateEnemies,
   type Enemy,
   type BrosGameState,
@@ -175,7 +177,7 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
       setGame((g) => {
         if (g.phase !== "playing" || g.winner) return g;
         const dir = keysRef.current.values().next().value ?? null;
-        const enemies = updateEnemies(g.enemies);
+        let enemies = updateEnemies(g.enemies);
         const eTick = g.eTick + 1;
         const players = g.players.map((p) => {
           if (p.id !== selfIdRef.current) return p; // el rival llega por red
@@ -183,8 +185,13 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
           np = applyGravity(np);
           np = resolveCollisions(np, g.tiles);
           np = { ...np, x: np.x + np.vx };
-          // Chocar con un enemigo: perdés una vida y volvés a la salida.
-          if (hitEnemy(np, enemies)) {
+          // Saltar encima de un enemigo: lo destruye (o golpea al jefe) y rebotá.
+          const stomp = stompEnemy(np, enemies);
+          enemies = stomp.enemies;
+          if (stomp.bounced) {
+            np = { ...np, vy: -10, onGround: false, jumped: false };
+          } else if (hitEnemy(np, enemies)) {
+            // Choque lateral/abajo: perdés una vida y volvés a la salida.
             np = { ...resetPlayer(np), lives: np.lives - 1 };
           }
           const { player } = collectCoins(np, g.tiles);
@@ -249,9 +256,17 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
     const render = () => {
       const g = gameRef.current;
       ctx.clearRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+      // Fondo según el "mundo": cada modo y etapa tiene su propio cielo.
+      const sky =
+        g.mode === "temple" ? ["#0a1a2f", "#041020"]
+        : g.mode === "coop"
+          ? g.level >= 3 ? ["#2a1a3a", "#12082a"]
+            : g.level === 2 ? ["#0f2740", "#081423"]
+            : ["#0d1b2a", "#051424"]
+        : ["#0d1b2a", "#051424"];
       const grad = ctx.createLinearGradient(0, 0, 0, SCREEN_HEIGHT);
-      grad.addColorStop(0, "#0d1b2a");
-      grad.addColorStop(1, "#051424");
+      grad.addColorStop(0, sky[0]);
+      grad.addColorStop(1, sky[1]);
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
       g.tiles.forEach((t) => {
@@ -318,6 +333,12 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
         ctx.fillRect(e.x + e.w * 0.22 + (e.dir > 0 ? 2 : 0), eyeY, 2, 3);
         ctx.fillRect(e.x + e.w * 0.62 + (e.dir > 0 ? 2 : 0), eyeY, 2, 3);
         if (e.boss) {
+          // Barra de vida del jefe
+          const hp = e.hp ?? BOSS_HP;
+          ctx.fillStyle = "#1b0a24";
+          ctx.fillRect(e.x - 3, bobY - 12, e.w + 6, 6);
+          ctx.fillStyle = hp > BOSS_HP / 2 ? "#ffd700" : hp > 1 ? "#ff9f2e" : "#e63946";
+          ctx.fillRect(e.x - 1, bobY - 11, Math.max(0, (e.w + 2) * (hp / BOSS_HP)), 4);
           ctx.fillStyle = "#ffd700";
           ctx.font = "10px monospace";
           ctx.textAlign = "center";
@@ -390,8 +411,8 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
   if (!room) {
     return (
       <div className="bros-lobby">
-        <h2>El Dúo de la Mesita</h2>
-        <p>¡Aventura de plataformas en pareja, con etapas y historias!</p>
+        <h2>Super Bros</h2>
+        <p>¡Aventura de plataformas en pareja, con etapas, enemigos y un jefe final!</p>
         <div className="bros-modes">
           {([
             ["race", "🏁 Carrera", "Llegá primero a la meta"],

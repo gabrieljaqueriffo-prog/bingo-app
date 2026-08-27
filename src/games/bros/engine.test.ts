@@ -10,6 +10,8 @@ import {
   makeLevel,
   updateEnemies,
   hitEnemy,
+  stompEnemy,
+  BOSS_HP,
   type Enemy,
   SCREEN_HEIGHT,
   MOVE_SPEED,
@@ -147,5 +149,22 @@ describe("Super Bros Engine", () => {
     expect(hitEnemy(hit, enemy)).toBe(true);
     const miss = { ...basePlayer, x: 500, y: 300 };
     expect(hitEnemy(miss, enemy)).toBe(false);
+  });
+
+  it("should let the boss be stomped to reduce HP and die after BOSS_HP hits", () => {
+    const boss = { id: "boss", x: 300, y: 300, w: 46, h: 66, minX: 0, maxX: 800, dir: 1, speed: 2, boss: true, hp: BOSS_HP };
+    let enemies = [boss] as Enemy[];
+    const stomper = { ...basePlayer, x: 315, y: 270, vy: 6 };
+    const r1 = stompEnemy(stomper, enemies);
+    expect(r1.bounced).toBe(true);
+    expect(r1.enemies[0].hp).toBe(BOSS_HP - 1);
+    enemies = r1.enemies;
+    // golpes repetidos (sin stun) lo matan tras BOSS_HP golpes
+    let hits = BOSS_HP - 1;
+    while (hits-- > 0) {
+      const r = stompEnemy(stomper, enemies.map((e) => ({ ...e, stun: 0 })));
+      enemies = r.enemies;
+    }
+    expect(enemies.length).toBe(0);
   });
 });
