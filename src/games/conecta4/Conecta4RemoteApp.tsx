@@ -161,7 +161,7 @@ function RemoteInner({
   }
 
   if (screen === "play" && room) {
-    return <PlayOnline room={room} role={role} onUpdate={setRoom} onExit={() => setScreen("menu")} />;
+    return <PlayOnline room={room} role={role} onUpdate={setRoom} onExit={onExit} />;
   }
 
   return null;

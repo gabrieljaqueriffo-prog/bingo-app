@@ -41,6 +41,7 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
   const [selfId, setSelfId] = useState<"red" | "blue">("red");
   const [error, setError] = useState<string>("");
   const [mode, setMode] = useState<BrosMode>("race");
+  const [joinCode, setJoinCode] = useState("");
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
   const revRef = useRef<number>(1);
@@ -52,16 +53,22 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
   const selfIdRef = useRef(selfId);
   selfIdRef.current = selfId;
 
+  const doJoin = (code: string) => {
+    const clean = code.trim().toUpperCase();
+    if (!/^[A-Z0-9]{4,8}$/.test(clean)) return;
+    void joinBrosRoom(clean).then((res) => {
+      if (res === "missing") { setError("La sala no existe."); return; }
+      revRef.current = res.rev;
+      setRoom(res);
+      setGame(res.state);
+      setSelfId("blue");
+      window.location.hash = `#sala=${clean}&juego=bros`;
+    });
+  };
+
   useEffect(() => {
-    if (urlCode) {
-      void joinBrosRoom(urlCode).then((res) => {
-        if (res === "missing") { setError("La sala no existe."); return; }
-        revRef.current = res.rev;
-        setRoom(res);
-        setGame(res.state);
-        setSelfId("blue");
-      });
-    }
+    if (urlCode) doJoin(urlCode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlCode]);
 
   const createRoom = async () => {
@@ -108,6 +115,9 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
     };
     const jumpKeys = new Set(["ArrowUp", "w", "W"]);
     const down = (e: KeyboardEvent) => {
+      // No robar teclas mientras se escribe en un campo de texto.
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
       const dir = dirs[e.key];
       if (dir) { keysRef.current.add(dir); e.preventDefault(); }
       if (jumpKeys.has(e.key)) { doJump(); e.preventDefault(); }
@@ -357,21 +367,38 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
         </div>
         <p className="bros-note">El modo lo elige quien crea la sala</p>
         <button onClick={createRoom} className="bros-btn primary">Crear sala</button>
-        <div style={{ display: "flex", gap: ".5rem", alignItems: "center" }}>
-          <input
-            type="text"
-            placeholder="Código de sala"
-            value={urlCode ?? ""}
-            onChange={(e) => {
-              const code = e.target.value.toUpperCase();
-              if (/^[A-Z0-9]{2,8}$/.test(code)) window.location.hash = `#sala=${code}&juego=bros`;
-            }}
-          />
-          <button onClick={async () => {
-            if (!urlCode) return;
-            await navigator.clipboard.writeText(brosLink(urlCode));
-            alert("¡Link copiado!");
-          }} disabled={!urlCode} title="Compartir"><Share2 size={20} /></button>
+        <div style={{ display: "flex", flexDirection: "column", gap: ".5rem", width: "100%", maxWidth: 280 }}>
+          <label style={{ display: "flex", flexDirection: "column", gap: ".3rem" }}>
+            <span className="bros-note">Código de la sala</span>
+            <input
+              type="text"
+              value={joinCode}
+              placeholder="AB2CD"
+              maxLength={6}
+              autoCapitalize="characters"
+              onChange={(e) => setJoinCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
+            />
+          </label>
+          <div style={{ display: "flex", gap: ".5rem" }}>
+            <button
+              className="bros-btn secondary"
+              disabled={joinCode.length < 4}
+              onClick={() => doJoin(joinCode)}
+            >
+              Unirme
+            </button>
+            <button
+              className="bros-btn secondary"
+              disabled={joinCode.length < 4}
+              title="Compartir código"
+              onClick={async () => {
+                await navigator.clipboard.writeText(brosLink(joinCode));
+                alert("¡Link copiado!");
+              }}
+            >
+              <Share2 size={16} /> Compartir
+            </button>
+          </div>
         </div>
         <button onClick={() => { window.location.hash = ""; onExit(); }} className="bros-btn secondary">Volver al menú</button>
         <p className="bros-note">Cada uno juega desde su celu, con botones en pantalla</p>
