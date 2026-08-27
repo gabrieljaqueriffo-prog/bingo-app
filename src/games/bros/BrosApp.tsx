@@ -183,6 +183,9 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
           if (g.mode === "coop" && foe && reachFlag(me, g.tiles) && reachFlag(foe, g.tiles)) {
             phase = "finished"; // winner queda null → pantalla "¡GANARON!"
           }
+          if (g.mode === "temple" && reachFlag(me, g.tiles)) {
+            phase = "finished"; // el trofeo despierta: ganan los dos
+          }
         }
         return { ...g, players, winner, phase };
       });
@@ -265,6 +268,35 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
         }
       }
       g.players.forEach(drawSprite);
+      if (g.mode === "temple") {
+        // Etiquetas de sellos, runa y trofeo
+        ctx.font = "10px monospace";
+        ctx.fillStyle = "#8fd0ff";
+        ctx.textAlign = "center";
+        const plateByPair = (pair: number) => g.tiles.find((t) => t.type === "plate" && t.pair === pair);
+        const sello = plateByPair(1);
+        const espejo = plateByPair(2);
+        const runa = plateByPair(3);
+        if (sello) ctx.fillText("EL SELLO DEL SOL", sello.x + sello.w / 2, sello.y - 6);
+        if (espejo) ctx.fillText("EL ESPEJO DE LA LUNA", espejo.x + espejo.w / 2, espejo.y - 6);
+        if (runa) ctx.fillText("EL CANTO DE LA RUNA", runa.x + runa.w / 2, runa.y - 6);
+        ctx.fillStyle = "#ffd700";
+        ctx.textAlign = "right";
+        ctx.fillText("EL TROFEO DORADO", 792, 376);
+        // Penumbra de la cueva (zona derecha)
+        ctx.fillStyle = "rgba(2, 8, 18, 0.45)";
+        ctx.fillRect(446, 0, SCREEN_WIDTH - 446, SCREEN_HEIGHT);
+        // Rótulos de zona, encima de la penumbra
+        ctx.font = "12px monospace";
+        ctx.textAlign = "center";
+        ctx.fillStyle = "#e8c46a";
+        ctx.fillText("AFUERA · LA MONTAÑA", 215, 40);
+        ctx.fillStyle = "#9ac9e0";
+        ctx.fillText("LA CUEVA DE LOS ECOS", 620, 40);
+        ctx.font = "10px monospace";
+        ctx.fillStyle = "#a9c5db";
+        ctx.fillText("adentro: seguí el canto de las runas", 620, 58);
+      }
       if (g.winner) {
         ctx.fillStyle = "rgba(0,0,0,0.7)";
         ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
@@ -310,6 +342,7 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
             ["coins", "🪙 Monedas", "Primero en juntar 8 gana"],
             ["lives", "❤️ Vidas", "Con huecos: último en pie gana"],
             ["coop", "🤝 Cooperación", "Placas: uno abre la puerta para el otro"],
+            ["temple", "🏛️ El Templo", "Cueva con historia: sellos afuera, runas adentro"],
           ] as [BrosMode, string, string][]).map(([id, name, desc]) => (
             <button
               key={id}

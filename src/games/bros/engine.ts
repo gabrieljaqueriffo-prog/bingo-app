@@ -44,7 +44,7 @@ export interface BrosTile {
 
 export type Phase = "lobby" | "playing" | "finished";
 
-export type BrosMode = "race" | "coins" | "lives" | "coop";
+export type BrosMode = "race" | "coins" | "lives" | "coop" | "temple";
 export const COIN_GOAL = 8;
 
 export interface BrosGameState {
@@ -117,9 +117,36 @@ function coopTiles(): BrosTile[] {
   ];
 }
 
+// El Templo Perdido: cooperación con historia. Un explorador entra a la
+// Cueva de los Ecos; el otro queda afuera pisando los sellos antiguos que
+// abren —una por una— las puertas del interior. Solo juntos despiertan al
+// Trofeo Dorado de la Mesita.
+function templeTiles(): BrosTile[] {
+  return [
+    ...groundSegment(0, SCREEN_WIDTH),
+    // Sellos del exterior
+    { type: "plate", x: 240, y: GROUND_Y - 12, w: 56, h: 12, pair: 1 },
+    { type: "plate", x: 120, y: GROUND_Y - 12, w: 56, h: 12, pair: 2 },
+    // Entrada de la cueva (se abre con el Sello del Sol)
+    { type: "gate", x: 430, y: 200, w: 16, h: GROUND_Y - 200, pair: 1 },
+    // Puerta del corredor (se abre con el Espejo de la Luna)
+    { type: "gate", x: 520, y: 250, w: 16, h: GROUND_Y - 250, pair: 2 },
+    // El Canto de la Runa (interior): abre la cámara del trofeo
+    { type: "plate", x: 565, y: GROUND_Y - 12, w: 44, h: 12, pair: 3 },
+    { type: "gate", x: 640, y: 250, w: 16, h: GROUND_Y - 250, pair: 3 },
+    // El Trofeo Dorado de la Mesita
+    { type: "flag", x: 750, y: 384, w: 32, h: 64 },
+    platform(470, 380, 120),
+    coin(300, 380),
+    coin(480, 340),
+    coin(740, 330),
+  ];
+}
+
 export function tilesForMode(mode: BrosMode): BrosTile[] {
   if (mode === "lives") return livesTiles();
   if (mode === "coop") return coopTiles();
+  if (mode === "temple") return templeTiles();
   return raceTiles();
 }
 
