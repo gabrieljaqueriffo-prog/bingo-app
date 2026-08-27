@@ -1,35 +1,62 @@
 .bros-game {
-  position: relative;
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
   background: radial-gradient(circle at top, #0d1b2a 0%, #051424 100%);
   color: #d8ecf7;
   font-family: "Press Start 2P", monospace;
   overflow: hidden;
   touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
-.bros-game canvas {
+.bros-topbar {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: max(.55rem, env(safe-area-inset-top)) .75rem .45rem;
+  z-index: 30;
+}
+.bros-topbar .bros-code { font-size: 1rem; }
+.bros-you { font-size: .68rem; color: #a9c5db; }
+.bros-topbar-actions { display: flex; gap: .4rem; margin-left: auto; }
+.bros-btn.small {
+  padding: .45rem .7rem;
+  font-size: .68rem;
+  border-radius: 10px;
+  font-family: inherit;
+}
+.bros-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+.bros-stage canvas {
   display: block;
   width: 100%;
-  max-width: 800px;
-  height: auto;
-  margin: 0 auto;
+  height: 100%;
+  object-fit: contain;
+  background: #051424;
   image-rendering: pixelated;
 }
-.bros-overlay {
+.bros-rotate-hint {
+  display: none;
   position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1rem;
-  text-align: center;
-  z-index: 10;
+  top: .45rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: .58rem;
+  color: #8fd0ff;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  padding: .32rem .7rem;
+  z-index: 15;
   pointer-events: none;
+  white-space: nowrap;
 }
-.bros-overlay h3 {
-  font-size: 1.4rem;
-  margin: 0;
-  text-shadow: 2px 2px 0 #000;
+@media (orientation: portrait) {
+  .bros-rotate-hint { display: block; }
 }
 .bros-btn {
   padding: 14px 28px;

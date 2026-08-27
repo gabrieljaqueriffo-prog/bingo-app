@@ -20,7 +20,7 @@ import {
   type BrosRoom,
 } from "./remote";
 import "./bros.css";
-import { ChevronLeft, ChevronRight, ChevronUp, Copy, Share2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronUp, Share2 } from "lucide-react";
 
 const jumpSound = new Howl({ src: ["/sounds/jump.mp3"], volume: 0.3 });
 const coinSound = new Howl({ src: ["/sounds/coin.mp3"], volume: 0.4 });
@@ -250,49 +250,61 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
 
   return (
     <div className="bros-game">
-      <canvas ref={canvasRef} width={SCREEN_WIDTH} height={SCREEN_HEIGHT} />
-      <div className="bros-overlay">
-        <h3>Sala: <span className="bros-code">{room.code}</span> — {selfId === "red" ? "🔴 Rojo" : "🔵 Azul"}</h3>
-        <div style={{ display: "flex", gap: ".5rem" }}>
-          <button onClick={() => navigator.clipboard.writeText(room.code)} className="bros-btn secondary"><Copy size={16} /> Copiar</button>
-          <button onClick={async () => { await navigator.clipboard.writeText(brosLink(room.code)); alert("¡Link copiado!"); }} className="bros-btn secondary">Compartir link</button>
+      <header className="bros-topbar">
+        <span className="bros-code">{room.code}</span>
+        <span className="bros-you">{selfId === "red" ? "🔴 Vos: Rojo" : "🔵 Vos: Azul"}</span>
+        <div className="bros-topbar-actions">
+          <button
+            className="bros-btn small"
+            onClick={async () => {
+              await navigator.clipboard.writeText(brosLink(room.code));
+              alert("¡Link de invitación copiado!");
+            }}
+            aria-label="Copiar invitación"
+          >
+            <Share2 size={15} />
+          </button>
+          <button className="bros-btn small" onClick={() => { window.location.hash = ""; onExit(); }}>Salir</button>
         </div>
-        <button onClick={() => { window.location.hash = ""; onExit(); }} className="bros-btn secondary" style={{ position: "absolute", top: "1rem", right: "1rem", zIndex: 10 }}>Salir</button>
-        <kbd className="bros-controls">En celu: botones de abajo 👇 · En compu: A / D + W</kbd>
-      </div>
-      <div className="bros-controls-touch">
-        <div className="bros-group">
+      </header>
+      <div className="bros-stage">
+        <canvas ref={canvasRef} width={SCREEN_WIDTH} height={SCREEN_HEIGHT} />
+        <div className="bros-rotate-hint">📱 Girá el celu en horizontal para jugar mejor</div>
+        <kbd className="bros-controls">◀ ▶ correr · ⬆ saltar (2 veces = doble salto)</kbd>
+        <div className="bros-controls-touch">
+          <div className="bros-group">
+            <button
+              type="button"
+              className="bros-pad"
+              aria-label="Ir a la izquierda"
+              onPointerDown={() => keysRef.current.add("left")}
+              onPointerUp={() => keysRef.current.delete("left")}
+              onPointerLeave={() => keysRef.current.delete("left")}
+              onPointerCancel={() => keysRef.current.delete("left")}
+            >
+              <ChevronLeft size={34} />
+            </button>
+            <button
+              type="button"
+              className="bros-pad"
+              aria-label="Ir a la derecha"
+              onPointerDown={() => keysRef.current.add("right")}
+              onPointerUp={() => keysRef.current.delete("right")}
+              onPointerLeave={() => keysRef.current.delete("right")}
+              onPointerCancel={() => keysRef.current.delete("right")}
+            >
+              <ChevronRight size={34} />
+            </button>
+          </div>
           <button
             type="button"
-            className="bros-pad"
-            aria-label="Ir a la izquierda"
-            onPointerDown={() => keysRef.current.add("left")}
-            onPointerUp={() => keysRef.current.delete("left")}
-            onPointerLeave={() => keysRef.current.delete("left")}
-            onPointerCancel={() => keysRef.current.delete("left")}
+            className="bros-pad jump"
+            aria-label="Saltar"
+            onPointerDown={doJump}
           >
-            <ChevronLeft size={34} />
-          </button>
-          <button
-            type="button"
-            className="bros-pad"
-            aria-label="Ir a la derecha"
-            onPointerDown={() => keysRef.current.add("right")}
-            onPointerUp={() => keysRef.current.delete("right")}
-            onPointerLeave={() => keysRef.current.delete("right")}
-            onPointerCancel={() => keysRef.current.delete("right")}
-          >
-            <ChevronRight size={34} />
+            <ChevronUp size={38} />
           </button>
         </div>
-        <button
-          type="button"
-          className="bros-pad jump"
-          aria-label="Saltar"
-          onPointerDown={doJump}
-        >
-          <ChevronUp size={38} />
-        </button>
       </div>
     </div>
   );
