@@ -10,7 +10,6 @@ import {
   Hash,
   History,
   ImagePlus,
-  Dice5,
   Timer,
   Wifi,
   Ship,
@@ -548,17 +547,13 @@ export default function App() {
       <GamePicker
         back={() => setView("home")}
         onPick={(picked) => {
-          if (picked === "mentiroso") {
-            setView("mentiroso");
-          } else if (picked === "conecta4") {
-            setView("conecta4");
-          } else if (picked === "conecta4-online") {
+          if (picked === "conecta4-online") {
             setView("conecta4-online");
           } else if (picked === "stop-online") {
             setView("stop-online");
           } else if (picked === "mentiroso-online") {
             setView("mentiroso-online");
-            } else if (picked === "naval") {
+          } else if (picked === "naval") {
             setView("naval");
           } else if (picked === "bros") {
             setView("bros");
@@ -591,9 +586,7 @@ function Home({
 }) {
   const games = [
     { id: "bingo", letter: "B", name: "Bingo 75", desc: "Cantá línea y carta", cls: "tile-bingo", icon: <Hash /> },
-    { id: "mentiroso", letter: "M", name: "Mentiroso", desc: "Dados · ¿mentís o dudás?", cls: "tile-mentiroso", icon: <Dice5 /> },
     { id: "mentiroso-online", letter: "MO", name: "Mentiroso Online", desc: "Dados ocultos, en tu celu", cls: "tile-mentiroso", icon: <Wifi /> },
-    { id: "conecta4", letter: "4", name: "Conecta 4", desc: "Fichas · 4 en línea", cls: "tile-c4", icon: <Grid3X3 /> },
     { id: "conecta4-online", letter: "4G", name: "Conecta 4 Online", desc: "Cada uno en su celu", cls: "tile-c4o", icon: <Wifi /> },
     { id: "stop-online", letter: "S", name: "Stop", desc: "Letra + categorías, online", cls: "tile-stop", icon: <Timer /> },
         { id: "naval", letter: "N", name: "Batalla Naval", desc: "Hundí su flota, online", cls: "tile-naval", icon: <Ship /> },
@@ -608,9 +601,9 @@ function Home({
   }, []);
   const phrases = [
     { letter: "B", title: <>Cantá <em>¡bingo!</em></>, sub: "Tus cartones, siempre contigo" },
-    { letter: "M", title: <>¿Mentís o <em>dudás?</em></>, sub: "El dado no perdona al mentiroso" },
-    { letter: "4", title: <>Conectá <em>cuatro</em></>, sub: "En fila, columna o diagonal" },
-    { letter: "S", title: <>¡<em>Stop!</em> Se terminó el tiempo</>, sub: "Nombre, animal, comida…" },
+    { letter: "M", title: <>¿Mentís o <em>dudás?</em></>, sub: "Dados ocultos, en tu celu" },
+    { letter: "4", title: <>Conectá <em>cuatro</em></>, sub: "Cada uno desde su celular" },
+    { letter: "S", title: <>¡<em>Stop!</em> Se terminó el tiempo</>, sub: "Categorías, online" },
   ];
   const current = phrases[tick % phrases.length];
 
@@ -634,7 +627,7 @@ function Home({
       </div>
 
       <section className="hero">
-        <p className="eyebrow">7 JUEGOS PARA JUGAR EN PAREJA</p>
+        <p className="eyebrow">6 JUEGOS · ONLINE O BINGO</p>
         <h1 key={`t${tick % phrases.length}`} className="hero-swap">
           {current.title}
         </h1>
@@ -683,7 +676,7 @@ function Home({
   );
 }
 
-function GamePicker({ onPick, back }: { onPick: (game: "bingo" | "mentiroso" | "mentiroso-online" | "conecta4" | "conecta4-online" | "stop-online" | "naval" | "bros") => void; back: () => void }) {
+function GamePicker({ onPick, back }: { onPick: (game: "bingo" | "mentiroso-online" | "conecta4-online" | "stop-online" | "naval" | "bros") => void; back: () => void }) {
   return (
     <main className="page">
       <PageHead title="Elegí un juego" back={back} />
@@ -696,27 +689,11 @@ function GamePicker({ onPick, back }: { onPick: (game: "bingo" | "mentiroso" | "
           </span>
           <ChevronRight />
         </button>
-        <button onClick={() => onPick("mentiroso")}>
-          <span className="mini-ball">M</span>
-          <span>
-            <b>Mentiroso</b>
-            <small>Dados · 2 jugadores · un dispositivo</small>
-          </span>
-          <ChevronRight />
-        </button>
         <button onClick={() => onPick("mentiroso-online")}>
           <span className="mini-ball">MG</span>
           <span>
             <b>Mentiroso Online</b>
             <small>Dados ocultos · cada uno desde su celular</small>
-          </span>
-          <ChevronRight />
-        </button>
-        <button onClick={() => onPick("conecta4")}>
-          <span className="mini-ball">4</span>
-          <span>
-            <b>Conecta 4</b>
-            <small>Fichas · 2 jugadores · conectá cuatro en línea</small>
           </span>
           <ChevronRight />
         </button>
