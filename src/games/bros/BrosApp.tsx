@@ -2,7 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { Howl } from "howler";
 import {
   applyInput,
+  applyGravity,
+  collectCoins,
   createInitialGameState,
+  reachFlag,
+  resolveCollisions,
   type BrosGameState,
   type BrosPlayer,
   SCREEN_WIDTH,
@@ -14,7 +18,6 @@ import {
   fetchBrosRoom,
   joinBrosRoom,
   parseBrosLink,
-  processInputs,
   subscribeBrosRoom,
   updateBrosRoom,
   type BrosRoom,
@@ -116,23 +119,31 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Suscripción a cambios remotos
+  // Suscripción a cambios remotos: toma el estado de la sala pero
+  // conserva SIEMPRE tu propio jugador (tu simulación local manda sobre vos).
   useEffect(() => {
     if (!room) return;
     const code = room.code;
     const stop = subscribeBrosRoom(code, (updated) => {
-      if (updated.rev >= revRef.current) {
-        revRef.current = updated.rev;
-        setRoom(updated);
-        setGame(updated.state);
-      }
+      if (updated.rev < revRef.current) return;
+      revRef.current = updated.rev;
+      setRoom(updated);
+      setGame((g) => {
+        const mine = g.players.find((p) => p.id === selfIdRef.current);
+        return {
+          ...updated.state,
+          players: updated.state.players.map((p) =>
+            p.id === selfIdRef.current && mine ? mine : p,
+          ),
+        };
+      });
     });
     return stop;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room?.code]);
 
-  // Física local: gravedad, colisiones, monedas y bandera (30fps).
-  // El anfitrión comitea el estado a la sala; el invitado simula y recibe el estado remoto.
+  // Física local (30fps): cada cliente simula SOLO a su propio jugador
+  // (movimiento, gravedad, colisiones, monedas y meta) y lo publica ~4 veces/seg.
   useEffect(() => {
     if (!room) return;
     const tick = setInterval(() => {
@@ -140,16 +151,22 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
         if (g.phase !== "playing" || g.winner) return g;
         const dir = keysRef.current.values().next().value ?? null;
         const players = g.players.map((p) => {
-          if (p.id !== selfIdRef.current) return p;
-          return dir ? applyInput(p, dir) : applyInput(p, "stop");
+          if (p.id !== selfIdRef.current) return p; // el rival llega por red
+          let np = dir ? applyInput(p, dir) : applyInput(p, "stop");
+          np = applyGravity(np);
+          np = resolveCollisions(np, g.tiles);
+          np = { ...np, x: np.x + np.vx };
+          const { player } = collectCoins(np, g.tiles);
+          return player;
         });
-        return processInputs({ ...g, players }, {});
+        const me = players.find((p) => p.id === selfIdRef.current);
+        const winner = me && reachFlag(me, g.tiles) ? selfIdRef.current : g.winner;
+        return { ...g, players, winner, phase: winner ? "finished" : g.phase };
       });
     }, 1000 / 30);
     const commit = setInterval(() => {
-      if (selfIdRef.current !== "red") return;
       void commitGame(room.code, gameRef.current);
-    }, 300);
+    }, 250);
     return () => { clearInterval(tick); clearInterval(commit); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room?.code]);
@@ -195,6 +212,21 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
           : "#fff";
         ctx.fillRect(t.x, t.y, t.w, t.h);
       });
+      // Cartel de la meta y contador de monedas propias
+      const flag = g.tiles.find((t) => t.type === "flag");
+      if (flag) {
+        ctx.fillStyle = "rgba(255,255,255,.85)";
+        ctx.font = "11px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText("META", flag.x + flag.w / 2, flag.y - 8);
+      }
+      const meNow = g.players.find((p) => p.id === selfIdRef.current);
+      if (meNow) {
+        ctx.fillStyle = "#ffd700";
+        ctx.font = "14px monospace";
+        ctx.textAlign = "left";
+        ctx.fillText("● " + meNow.coins, 10, 22);
+      }
       g.players.forEach(drawSprite);
       if (g.winner) {
         ctx.fillStyle = "rgba(0,0,0,0.7)";
@@ -270,7 +302,6 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
       <div className="bros-stage">
         <canvas ref={canvasRef} width={SCREEN_WIDTH} height={SCREEN_HEIGHT} />
         <div className="bros-rotate-hint">📱 Girá el celu en horizontal para jugar mejor</div>
-        <kbd className="bros-controls">◀ ▶ correr · ⬆ saltar (2 veces = doble salto)</kbd>
         <div className="bros-controls-touch">
           <div className="bros-group">
             <button

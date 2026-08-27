@@ -15,7 +15,9 @@
   display: flex;
   align-items: center;
   gap: .6rem;
-  padding: max(.55rem, env(safe-area-inset-top)) .75rem .45rem;
+  width: 100%;
+  box-sizing: border-box;
+  padding: max(.55rem, env(safe-area-inset-top)) max(.75rem, env(safe-area-inset-right)) .45rem .75rem;
   z-index: 30;
 }
 .bros-topbar .bros-code { font-size: 1rem; }
@@ -39,6 +41,14 @@
   object-fit: contain;
   background: #051424;
   image-rendering: pixelated;
+}
+/* En horizontal la pantalla es más ancha que el mundo (800x480):
+   llenamos todo y recortamos solo cielo, anclando abajo. */
+@media (orientation: landscape) {
+  .bros-stage canvas {
+    object-fit: cover;
+    object-position: bottom;
+  }
 }
 .bros-rotate-hint {
   display: none;
@@ -80,16 +90,6 @@
 .bros-btn:hover {
   scale: 1.04;
   box-shadow: 0 0 12px rgba(255, 255, 255, 0.2);
-}
-.bros-controls {
-  position: absolute;
-  bottom: 7rem;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 0.7rem;
-  color: #9ac9e0;
-  text-align: center;
-  pointer-events: none;
 }
 .bros-controls-touch {
   position: absolute;
