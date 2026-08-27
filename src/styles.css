@@ -82,7 +82,7 @@ button {
   font-size: 11px;
   letter-spacing: 0.17em;
   font-weight: 700;
-  color: #94701f;
+  color: #7a4c10; /* más contraste sobre crema */
 }
 .hero h1 {
   font: 700 clamp(42px, 13vw, 64px)/0.96 Fraunces;
@@ -91,7 +91,7 @@ button {
   min-height: 1.92em; /* reserva dos líneas: la frase rota sin mover la página */
 }
 .hero h1 em {
-  color: #b88619;
+  color: #8a5a00; /* dorado con contraste legible sobre crema */
   font-style: normal;
 }
 .hero > p:last-child {
@@ -222,8 +222,8 @@ button {
   animation: hero-in 0.45s ease both;
 }
 @keyframes hero-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 .home-games {
@@ -271,7 +271,7 @@ button {
   color: #183025;
 }
 .tile-text small {
-  color: #718078;
+  color: #5d6a62;
   font-size: 0.82rem;
   overflow: hidden;
   text-overflow: ellipsis;
