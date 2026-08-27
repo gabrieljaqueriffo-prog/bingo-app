@@ -210,6 +210,8 @@ button {
 .tile-c4       { background: #2e7cf6; }
 .tile-c4o      { background: #10a28a; }
 .tile-stop     { background: #2f9e6d; }
+.tile-naval    { background: #2e7cf6; }
+.tile-bros     { background: #e63946; }
 
 .hero-swap {
   animation: hero-in 0.45s ease both;
@@ -255,6 +257,8 @@ button {
 .game-tile.tile-c4 .tile-icon        { background: #2e7cf6; }
 .game-tile.tile-c4o .tile-icon       { background: #10a28a; }
 .game-tile.tile-stop .tile-icon      { background: #2f9e6d; }
+.game-tile.tile-naval .tile-icon     { background: #2e7cf6; }
+.game-tile.tile-bros .tile-icon      { background: #e63946; }
 .tile-text {
   display: grid;
   flex: 1;

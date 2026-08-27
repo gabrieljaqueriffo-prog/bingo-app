@@ -1,0 +1,110 @@
+.bros-game {
+  position: relative;
+  background: radial-gradient(circle at top, #0d1b2a 0%, #051424 100%);
+  color: #d8ecf7;
+  font-family: "Press Start 2P", monospace;
+  overflow: hidden;
+  touch-action: none;
+}
+.bros-game canvas {
+  display: block;
+  width: 100%;
+  max-width: 800px;
+  height: auto;
+  margin: 0 auto;
+  image-rendering: pixelated;
+}
+.bros-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  text-align: center;
+  z-index: 10;
+  pointer-events: none;
+}
+.bros-overlay h3 {
+  font-size: 1.4rem;
+  margin: 0;
+  text-shadow: 2px 2px 0 #000;
+}
+.bros-btn {
+  padding: 14px 28px;
+  border: none;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.15s ease;
+}
+.bros-btn.primary {
+  background: linear-gradient(135deg, #e63946, #c11a24);
+  color: white;
+}
+.bros-btn.secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.bros-btn:hover {
+  scale: 1.04;
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.2);
+}
+.bros-controls {
+  position: absolute;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.7rem;
+  color: #9ac9e0;
+  text-align: center;
+  pointer-events: none;
+}
+.bros-lobby {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  gap: 1.5rem;
+  padding: 2rem 1rem;
+}
+.bros-lobby h2 {
+  font-size: 1.6rem;
+  margin: 0;
+  text-shadow: 2px 2px 0 #000;
+}
+.bros-lobby p {
+  color: #a9c5db;
+  text-align: center;
+}
+.bros-lobby input {
+  width: 100%;
+  max-width: 220px;
+  padding: 0.7rem 1rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  font-size: 1rem;
+  text-align: center;
+}
+.bros-error {
+  color: #ffb9a6;
+  background: rgba(239, 93, 93, 0.12);
+  border: 1px solid rgba(239, 93, 93, 0.35);
+  border-radius: 12px;
+  padding: 0.7rem 1.1rem;
+  text-align: center;
+}
+.bros-code {
+  font-family: monospace;
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: #58c1ff;
+}

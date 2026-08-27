@@ -13,6 +13,7 @@ import {
   Dice5,
   Timer,
   Wifi,
+  Ship,
   MoreHorizontal,
   Mic,
   MicOff,
@@ -54,8 +55,12 @@ import StopRemoteApp from "./games/stop/StopRemoteApp";
 import { parseStopLink } from "./games/stop/stopRemote";
 import MentirosoRemoteApp from "./games/mentiroso/MentirosoRemoteApp";
 import { parseMentLink } from "./games/mentiroso/mentRemote";
+import NavalApp from "./games/naval/NavApp";
+import { parseNavalLink } from "./games/naval/navalRemote";
+import BrosApp from "./games/bros/BrosApp";
+import { parseBrosLink } from "./games/bros/remote";
 
-type View = "loading" | "home" | "games" | "verify" | "play" | "pick" | "mentiroso" | "mentiroso-online" | "conecta4" | "conecta4-online" | "stop-online";
+type View = "loading" | "home" | "games" | "verify" | "play" | "pick" | "mentiroso" | "mentiroso-online" | "conecta4" | "conecta4-online" | "stop-online" | "naval" | "bros";
 type CardView = "all" | "four" | "one";
 type PlayTheme = { marked: string; marked2: string; last: string; last2: string; modality: string; modality2: string; gradient: boolean };
 const defaultTheme: PlayTheme = { marked: "#ffc94a", marked2: "#ff9f2e", last: "#318df0", last2: "#705cff", modality: "#8b6cf6", modality2: "#ef5da8", gradient: true };
@@ -67,8 +72,8 @@ const makeCard = (
 ): Card => ({ id: crypto.randomUUID(), gameId, label: `Cartón ${n}`, rows });
 
 export default function App() {
-  const [view, setView] = useState<View>(() =>
-    parseMentLink() ? "mentiroso-online" : parseStopLink() ? "stop-online" : parseRoomLink() ? "conecta4-online" : "loading",
+      const [view, setView] = useState<View>(() =>
+    parseBrosLink() ? "bros" : parseNavalLink() ? "naval" : parseMentLink() ? "mentiroso-online" : parseStopLink() ? "stop-online" : parseRoomLink() ? "conecta4-online" : "loading",
   ),
     [game, setGame] = useState<Game | null>(null),
     [games, setGames] = useState<Game[]>([]),
@@ -553,6 +558,10 @@ export default function App() {
             setView("stop-online");
           } else if (picked === "mentiroso-online") {
             setView("mentiroso-online");
+            } else if (picked === "naval") {
+            setView("naval");
+          } else if (picked === "bros") {
+            setView("bros");
           } else {
             start();
           }
@@ -561,6 +570,8 @@ export default function App() {
     );
   if (view === "mentiroso") return <MentirosoApp onExit={() => setView("home")} />;
   if (view === "mentiroso-online") return <MentirosoRemoteApp onExit={() => setView("home")} />;
+  if (view === "naval") return <NavalApp onExit={() => setView("home")} />;
+  if (view === "bros") return <BrosApp onExit={() => setView("home")} />;
   if (view === "conecta4") return <Conecta4App onExit={() => setView("home")} />;
   if (view === "conecta4-online") return <Conecta4RemoteApp onExit={() => setView("home")} />;
   if (view === "stop-online") return <StopRemoteApp onExit={() => setView("home")} />;
@@ -585,6 +596,8 @@ function Home({
     { id: "conecta4", letter: "4", name: "Conecta 4", desc: "Fichas · 4 en línea", cls: "tile-c4", icon: <Grid3X3 /> },
     { id: "conecta4-online", letter: "4G", name: "Conecta 4 Online", desc: "Cada uno en su celu", cls: "tile-c4o", icon: <Wifi /> },
     { id: "stop-online", letter: "S", name: "Stop", desc: "Letra + categorías, online", cls: "tile-stop", icon: <Timer /> },
+        { id: "naval", letter: "N", name: "Batalla Naval", desc: "Hundí su flota, online", cls: "tile-naval", icon: <Ship /> },
+    { id: "bros", letter: "B", name: "Super Bros", desc: "Plataformas · online · para dos celus", cls: "tile-bros", icon: <Shapes /> },
   ] as const;
 
   // Frase que va rotando entre los juegos, con la pelotita saltando.
@@ -621,7 +634,7 @@ function Home({
       </div>
 
       <section className="hero">
-        <p className="eyebrow">6 JUEGOS PARA JUGAR EN PAREJA</p>
+        <p className="eyebrow">7 JUEGOS PARA JUGAR EN PAREJA</p>
         <h1 key={`t${tick % phrases.length}`} className="hero-swap">
           {current.title}
         </h1>
@@ -670,7 +683,7 @@ function Home({
   );
 }
 
-function GamePicker({ onPick, back }: { onPick: (game: "bingo" | "mentiroso" | "mentiroso-online" | "conecta4" | "conecta4-online" | "stop-online") => void; back: () => void }) {
+function GamePicker({ onPick, back }: { onPick: (game: "bingo" | "mentiroso" | "mentiroso-online" | "conecta4" | "conecta4-online" | "stop-online" | "naval" | "bros") => void; back: () => void }) {
   return (
     <main className="page">
       <PageHead title="Elegí un juego" back={back} />
@@ -720,6 +733,22 @@ function GamePicker({ onPick, back }: { onPick: (game: "bingo" | "mentiroso" | "
           <span>
             <b>Stop · Categorías</b>
             <small>Online · letra al azar · 6 categorías · 5 rondas</small>
+          </span>
+          <ChevronRight />
+        </button>
+                <button onClick={() => onPick("naval")}>
+          <span className="mini-ball">N</span>
+          <span>
+            <b>Batalla Naval</b>
+            <small>Online · ocultá tus barcos y hundí la flota rival</small>
+          </span>
+          <ChevronRight />
+        </button>
+        <button onClick={() => onPick("bros")}>
+          <span className="mini-ball">B</span>
+          <span>
+            <b>Super Bros</b>
+            <small>Plataformas · online · para dos celus</small>
           </span>
           <ChevronRight />
         </button>
