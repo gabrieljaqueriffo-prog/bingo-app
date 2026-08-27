@@ -36,11 +36,11 @@ export const fetchBrosRoom = async (code: string): Promise<BrosRoom | null> => {
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from("rooms")
-    .select("code, rev, state")
+    .select("code, rev, payload")
     .eq("code", code.toUpperCase())
     .maybeSingle();
   if (error || !data) return null;
-  return { code: data.code, rev: data.rev as number, state: data.state as BrosGameState };
+  return { code: data.code, rev: data.rev as number, state: (data.payload as { state: BrosGameState }).state };
 };
 
 export const updateBrosRoom = async (
@@ -56,7 +56,7 @@ export const updateBrosRoom = async (
     const nextRev = row.rev + 1;
     const { error } = await supabase
       .from("rooms")
-      .update({ state, rev: nextRev })
+      .update({ payload: { state }, rev: nextRev })
       .eq("code", code)
       .lt("rev", nextRev);
     if (!error) return { code, rev: nextRev, state };
@@ -70,9 +70,9 @@ export const updateBrosRoom = async (
 export const createBrosRoom = async (): Promise<{ code: string } | null> => {
   const supabase = getSupabase();
   const code = makeBrosCode();
-  const row = { code, kind: "bros", rev: 1, state: createInitialGameState() };
+  const row = { code, kind: "bros", rev: 1, payload: { state: createInitialGameState() } };
   const { error } = await supabase.from("rooms").insert(row);
-  if (error) return null;
+  if (error) { console.error("createBrosRoom:", error.message); return null; }
   return { code };
 };
 

@@ -55,11 +55,11 @@ export const fetchNavalRoom = async (code: string): Promise<NavalRow | null> => 
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from("rooms")
-    .select("code, rev, state")
+    .select("code, rev, payload")
     .eq("code", code.toUpperCase())
     .maybeSingle();
   if (error || !data) return null;
-  return { code: data.code, rev: data.rev as number, state: data.state as GameState };
+  return { code: data.code, rev: data.rev as number, state: (data.payload as { state: GameState }).state };
 };
 
 export const updateNavalRoom = async (
@@ -75,7 +75,7 @@ export const updateNavalRoom = async (
     const nextRev = row.rev + 1;
     const { error } = await supabase
       .from("rooms")
-      .update({ state, rev: nextRev })
+      .update({ payload: { state }, rev: nextRev })
       .eq("code", code)
       .lt("rev", nextRev);
     if (!error) return { code, rev: nextRev, state };
@@ -91,9 +91,9 @@ export const createNavalRoom = async (
 ): Promise<{ code: string; role: NavalRole } | null> => {
   const supabase = getSupabase();
   const code = makeNavalCode();
-  const row = { code, kind: "naval", rev: 1, state: startGame() };
+  const row = { code, kind: "naval", rev: 1, payload: { state: startGame() } };
   const { error } = await supabase.from("rooms").insert(row);
-  if (error) return null;
+  if (error) { console.error("createNavalRoom:", error.message); return null; }
   remember(code, "host");
   return { code, role: "host" };
 };
