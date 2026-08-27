@@ -88,6 +88,7 @@ button {
   font: 700 clamp(42px, 13vw, 64px)/0.96 Fraunces;
   margin: 10px 0 18px;
   letter-spacing: -0.04em;
+  min-height: 1.92em; /* reserva dos líneas: la frase rota sin mover la página */
 }
 .hero h1 em {
   color: #b88619;
@@ -97,6 +98,7 @@ button {
   color: #526158;
   line-height: 1.6;
   max-width: 380px;
+  min-height: 3.2em; /* idem: el subtítulo rota sin empujar el layout */
 }
 .home-actions {
   display: grid;

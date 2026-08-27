@@ -128,6 +128,38 @@
   border-color: rgba(230, 57, 70, 0.6);
 }
 .bros-pad.jump:active { background: rgba(230, 57, 70, 0.5); }
+.bros-modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .5rem;
+  width: 100%;
+  max-width: 420px;
+}
+.bros-mode {
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+  padding: .65rem .7rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.bros-mode b { font-size: .68rem; }
+.bros-mode small { font-size: .55rem; color: #a9c5db; }
+.bros-mode.sel {
+  border-color: #58c1ff;
+  background: rgba(88, 193, 255, 0.16);
+}
+.bros-note {
+  font-size: .58rem;
+  color: #7d97ab;
+  text-align: center;
+  margin: 0;
+}
 .bros-lobby {
   display: flex;
   flex-direction: column;

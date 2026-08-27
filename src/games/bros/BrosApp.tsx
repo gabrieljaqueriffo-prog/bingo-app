@@ -4,11 +4,16 @@ import {
   applyInput,
   applyGravity,
   collectCoins,
+  COIN_GOAL,
   createInitialGameState,
+  platePressed,
   reachFlag,
   resolveCollisions,
   type BrosGameState,
+  type BrosMode,
   type BrosPlayer,
+  type Phase,
+  type PlayerId,
   SCREEN_WIDTH,
   SCREEN_HEIGHT,
 } from "./engine";
@@ -35,6 +40,7 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
   const [game, setGame] = useState<BrosGameState>(createInitialGameState());
   const [selfId, setSelfId] = useState<"red" | "blue">("red");
   const [error, setError] = useState<string>("");
+  const [mode, setMode] = useState<BrosMode>("race");
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
   const revRef = useRef<number>(1);
@@ -59,7 +65,7 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
   }, [urlCode]);
 
   const createRoom = async () => {
-    const res = await createBrosRoom();
+    const res = await createBrosRoom(mode);
     if (!res) { setError("No se pudo crear la sala."); return; }
     const row = await fetchBrosRoom(res.code);
     if (!row) return;
@@ -160,8 +166,25 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
           return player;
         });
         const me = players.find((p) => p.id === selfIdRef.current);
-        const winner = me && reachFlag(me, g.tiles) ? selfIdRef.current : g.winner;
-        return { ...g, players, winner, phase: winner ? "finished" : g.phase };
+        const foe = players.find((p) => p.id !== selfIdRef.current);
+        let winner: PlayerId | null = g.winner;
+        let phase: Phase = g.phase;
+        if (me) {
+          if (g.mode === "race" && reachFlag(me, g.tiles)) {
+            winner = me.id; phase = "finished";
+          }
+          if (g.mode === "coins" && me.coins >= COIN_GOAL) {
+            winner = me.id; phase = "finished";
+          }
+          if (g.mode === "lives" && foe) {
+            if (me.lives <= 0) { winner = foe.id; phase = "finished"; }
+            if (foe.lives <= 0) { winner = me.id; phase = "finished"; }
+          }
+          if (g.mode === "coop" && foe && reachFlag(me, g.tiles) && reachFlag(foe, g.tiles)) {
+            phase = "finished"; // winner queda null → pantalla "¡GANARON!"
+          }
+        }
+        return { ...g, players, winner, phase };
       });
     }, 1000 / 30);
     const commit = setInterval(() => {
@@ -205,9 +228,18 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
       ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
       g.tiles.forEach((t) => {
         if (t.collected) return;
+        if (t.type === "gate") {
+          if (platePressed(g.tiles, t.pair ?? 0, g.players)) return; // abierta: no se dibuja
+          ctx.fillStyle = "#8fa3b8";
+          ctx.fillRect(t.x, t.y, t.w, t.h);
+          ctx.fillStyle = "#5c6e80";
+          for (let y = t.y + 6; y < t.y + t.h; y += 16) ctx.fillRect(t.x, y, t.w, 3);
+          return;
+        }
         ctx.fillStyle =
           t.type === "ground" || t.type === "platform" ? "#8B4513"
           : t.type === "coin" ? "#ffd700"
+          : t.type === "plate" ? "#f2c14e"
           : t.type === "flag" ? "#22c55e"
           : "#fff";
         ctx.fillRect(t.x, t.y, t.w, t.h);
@@ -225,7 +257,12 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
         ctx.fillStyle = "#ffd700";
         ctx.font = "14px monospace";
         ctx.textAlign = "left";
-        ctx.fillText("● " + meNow.coins, 10, 22);
+        ctx.fillText(g.mode === "coins" ? `● ${meNow.coins}/${COIN_GOAL}` : `● ${meNow.coins}`, 10, 22);
+        if (g.mode === "lives") {
+          ctx.fillStyle = "#e63946";
+          ctx.textAlign = "right";
+          ctx.fillText("♥".repeat(Math.max(0, meNow.lives)) || "—", SCREEN_WIDTH - 10, 22);
+        }
       }
       g.players.forEach(drawSprite);
       if (g.winner) {
@@ -238,6 +275,16 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
           g.winner === selfIdRef.current ? "¡GANASTE!" : "PERDISTE",
           SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2,
         );
+      } else if (g.phase === "finished") {
+        ctx.fillStyle = "rgba(0,0,0,0.7)";
+        ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+        ctx.fillStyle = "#22c55e";
+        ctx.font = "26px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText("¡GANARON!", SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - 12);
+        ctx.fillStyle = "#fff";
+        ctx.font = "12px monospace";
+        ctx.fillText("Cooperación completada 🤝", SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 18);
       }
       animRef.current = requestAnimationFrame(render);
     };
@@ -257,6 +304,25 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
       <div className="bros-lobby">
         <h2>Super Bros Online</h2>
         <p>¡Desafía a un amigo en este clásico juego de plataformas!</p>
+        <div className="bros-modes">
+          {([
+            ["race", "🏁 Carrera", "Llegá primero a la meta"],
+            ["coins", "🪙 Monedas", "Primero en juntar 8 gana"],
+            ["lives", "❤️ Vidas", "Con huecos: último en pie gana"],
+            ["coop", "🤝 Cooperación", "Placas: uno abre la puerta para el otro"],
+          ] as [BrosMode, string, string][]).map(([id, name, desc]) => (
+            <button
+              key={id}
+              type="button"
+              className={`bros-mode ${mode === id ? "sel" : ""}`}
+              onClick={() => setMode(id)}
+            >
+              <b>{name}</b>
+              <small>{desc}</small>
+            </button>
+          ))}
+        </div>
+        <p className="bros-note">El modo lo elige quien crea la sala</p>
         <button onClick={createRoom} className="bros-btn primary">Crear sala</button>
         <div style={{ display: "flex", gap: ".5rem", alignItems: "center" }}>
           <input
@@ -275,7 +341,7 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
           }} disabled={!urlCode} title="Compartir"><Share2 size={20} /></button>
         </div>
         <button onClick={() => { window.location.hash = ""; onExit(); }} className="bros-btn secondary">Volver al menú</button>
-        <kbd className="bros-controls">Cada uno juega desde su celu, con botones en pantalla</kbd>
+        <p className="bros-note">Cada uno juega desde su celu, con botones en pantalla</p>
       </div>
     );
   }

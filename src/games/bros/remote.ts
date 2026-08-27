@@ -9,6 +9,7 @@ import {
   reachFlag,
   resolveCollisions,
   type BrosGameState,
+  type BrosMode,
 } from "./engine";
 
 export interface BrosRoom {
@@ -67,10 +68,10 @@ export const updateBrosRoom = async (
   return null;
 };
 
-export const createBrosRoom = async (): Promise<{ code: string } | null> => {
+export const createBrosRoom = async (mode: BrosMode): Promise<{ code: string } | null> => {
   const supabase = getSupabase();
   const code = makeBrosCode();
-  const row = { code, kind: "bros", rev: 1, payload: { state: createInitialGameState() } };
+  const row = { code, kind: "bros", rev: 1, payload: { state: createInitialGameState(mode) } };
   const { error } = await supabase.from("rooms").insert(row);
   if (error) { console.error("createBrosRoom:", error.message); return null; }
   return { code };

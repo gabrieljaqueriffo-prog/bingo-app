@@ -30,7 +30,7 @@ export interface BrosPlayer {
   anim: number; // tiempo acumulado de animación
 }
 
-export type TileType = "ground" | "platform" | "coin" | "flag";
+export type TileType = "ground" | "platform" | "coin" | "flag" | "plate" | "gate";
 
 export interface BrosTile {
   type: TileType;
@@ -39,41 +39,89 @@ export interface BrosTile {
   w: number;
   h: number;
   collected?: boolean;
+  pair?: number; // une placa y compuerta en el modo cooperación
 }
 
 export type Phase = "lobby" | "playing" | "finished";
+
+export type BrosMode = "race" | "coins" | "lives" | "coop";
+export const COIN_GOAL = 8;
 
 export interface BrosGameState {
   players: BrosPlayer[];
   tiles: BrosTile[];
   phase: Phase;
   winner: PlayerId | null;
+  mode: BrosMode;
 }
 
-export const defaultTiles: BrosTile[] = [
-  // Suelo
-  ...Array.from({ length: Math.ceil(SCREEN_WIDTH / 32) }, (_, i) => ({
+const GROUND_Y = SCREEN_HEIGHT - 32;
+
+const groundSegment = (from: number, to: number): BrosTile[] =>
+  Array.from({ length: Math.round((to - from) / 32) }, (_, i) => ({
     type: "ground" as const,
-    x: i * 32,
-    y: SCREEN_HEIGHT - 32,
+    x: from + i * 32,
+    y: GROUND_Y,
     w: 32,
     h: 32,
-  })),
-  // Plataformas
-  { type: "platform" as const, x: 150, y: 380, w: 200, h: 24 },
-  { type: "platform" as const, x: 420, y: 300, w: 200, h: 24 },
-  { type: "platform" as const, x: 660, y: 240, w: 100, h: 24 },
-  // Banderín meta
-  { type: "flag" as const, x: 750, y: 190, w: 32, h: 64 },
-  // Monedas dispersas
-  ...[200, 240, 280, 330, 370, 420, 470, 520, 570, 620, 670, 720].map((x, i) => ({
-    type: "coin" as const,
-    x,
-    y: 290 - (i % 3) * 20,
-    w: 16,
-    h: 16,
-  })),
-];
+  }));
+
+const platform = (x: number, y: number, w: number): BrosTile => ({ type: "platform", x, y, w, h: 24 });
+const coin = (x: number, y: number): BrosTile => ({ type: "coin", x, y, w: 16, h: 16 });
+
+const flagTile: BrosTile = { type: "flag", x: 750, y: 190, w: 32, h: 64 };
+const coinsArc: BrosTile[] = [200, 240, 280, 330, 370, 420, 470, 520, 570, 620, 670, 720].map((x, i) =>
+  coin(x, 290 - (i % 3) * 20),
+);
+
+// Carrera y monedas: plataformas hasta la meta arriba a la derecha.
+function raceTiles(): BrosTile[] {
+  return [
+    ...groundSegment(0, SCREEN_WIDTH),
+    platform(150, 380, 200),
+    platform(420, 300, 200),
+    platform(660, 240, 100),
+    flagTile,
+    ...coinsArc,
+  ];
+}
+
+// Vidas: mismo mapa pero con huecos en el suelo. Caerte cuesta una vida.
+function livesTiles(): BrosTile[] {
+  return [
+    ...groundSegment(0, 288),
+    ...groundSegment(352, 544),
+    ...groundSegment(608, SCREEN_WIDTH),
+    platform(150, 380, 200),
+    platform(420, 300, 200),
+    platform(660, 240, 100),
+    flagTile,
+    ...coinsArc.slice(0, 6),
+  ];
+}
+
+// Cooperación: una compuerta que solo se abre mientras alguien pisa una placa.
+// Solo no la podés cruzar: uno sostiene la placa, el otro pasa, y después se turnan.
+function coopTiles(): BrosTile[] {
+  return [
+    ...groundSegment(0, SCREEN_WIDTH),
+    { type: "plate", x: 240, y: GROUND_Y - 12, w: 56, h: 12, pair: 1 },
+    { type: "gate", x: 400, y: 250, w: 16, h: GROUND_Y - 250, pair: 1 },
+    { type: "plate", x: 600, y: GROUND_Y - 12, w: 56, h: 12, pair: 1 },
+    platform(440, 380, 160),
+    platform(660, 240, 100),
+    flagTile,
+    coin(320, 300),
+    coin(520, 340),
+    coin(700, 200),
+  ];
+}
+
+export function tilesForMode(mode: BrosMode): BrosTile[] {
+  if (mode === "lives") return livesTiles();
+  if (mode === "coop") return coopTiles();
+  return raceTiles();
+}
 
 export const defaultPlayers: BrosPlayer[] = [
   {
@@ -108,12 +156,13 @@ export const defaultPlayers: BrosPlayer[] = [
   },
 ];
 
-export function createInitialGameState(): BrosGameState {
+export function createInitialGameState(mode: BrosMode = "race"): BrosGameState {
   return {
     players: defaultPlayers.map((p) => ({ ...p })),
-    tiles: defaultTiles.map((t) => ({ ...t })),
+    tiles: tilesForMode(mode).map((t) => ({ ...t })),
     phase: "playing",
     winner: null,
+    mode,
   };
 }
 
@@ -149,10 +198,33 @@ export function applyGravity(player: BrosPlayer): BrosPlayer {
   return p;
 }
 
-export function resolveCollisions(player: BrosPlayer, tiles: BrosTile[]): BrosPlayer {
+// ¿Hay alguien parado sobre una placa de ese par? (mantiene abierta su compuerta)
+export function platePressed(tiles: BrosTile[], pair: number, players: BrosPlayer[]): boolean {
+  return tiles.some(
+    (t) =>
+      t.type === "plate" &&
+      t.pair === pair &&
+      players.some(
+        (p) =>
+          p.y + p.height >= t.y - 2 &&
+          p.y + p.height <= t.y + t.h + 2 &&
+          p.x + p.width > t.x &&
+          p.x < t.x + t.w,
+      ),
+  );
+}
+
+export function resolveCollisions(
+  player: BrosPlayer,
+  tiles: BrosTile[],
+  players: BrosPlayer[] = [player],
+): BrosPlayer {
   const p = { ...player };
   const solid: BrosTile[] = tiles.filter(
-    (t) => (t.type === "ground" || t.type === "platform") && !t.collected,
+    (t) =>
+      t.type === "ground" ||
+      t.type === "platform" ||
+      (t.type === "gate" && !platePressed(tiles, t.pair ?? 0, players)),
   );
 
   for (const t of solid) {
@@ -178,6 +250,19 @@ export function resolveCollisions(player: BrosPlayer, tiles: BrosTile[]): BrosPl
         p.vy = 0;
         p.y = t.y + t.h;
       }
+    }
+  }
+
+  // Bloqueo horizontal (compuertas cerradas): frena sin trabar si ya te superponés.
+  for (const t of solid) {
+    const overlapY = p.y < t.y + t.h && p.y + p.height > t.y;
+    if (!overlapY) continue;
+    if (p.vx > 0 && p.x + p.width <= t.x && p.x + p.width + p.vx > t.x) {
+      p.x = t.x - p.width;
+      p.vx = 0;
+    } else if (p.vx < 0 && p.x >= t.x + t.w && p.x + p.vx < t.x + t.w) {
+      p.x = t.x + t.w;
+      p.vx = 0;
     }
   }
 
