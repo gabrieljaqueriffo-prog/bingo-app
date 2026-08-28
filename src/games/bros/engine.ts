@@ -473,6 +473,7 @@ export function updatePlayer(player: BrosPlayer, tiles: BrosTile[]): BrosPlayer 
   let p = applyGravity(player);
   p = resolveCollisions(p, tiles);
   p.x += p.vx;
+  p.y += p.vy; // <-- APLICA LA CAÍDA REAL
   p.anim = player.anim; // carryover para animación continua
   return p;
 }
