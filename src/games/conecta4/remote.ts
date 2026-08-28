@@ -117,22 +117,33 @@ export const subscribeRoom = (
   onUpdate: (row: RoomRow) => void,
 ): (() => void) => {
   const supabase = getSupabase();
+  let lastRev = -1;
   let cancelled = false;
+
+  const readLatest = async () => {
+    try {
+      const row = await fetchRoom(code);
+      if (row && !cancelled && row.rev > lastRev) {
+        lastRev = row.rev;
+        onUpdate(row);
+      }
+    } catch {}
+  };
 
   const channel = supabase
     .channel(`room-${code}`)
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "rooms", filter: `code=eq.${code}` },
-      async () => {
-        const row = await fetchRoom(code);
-        if (row && !cancelled) onUpdate(row);
-      },
+      readLatest,
     )
     .subscribe();
+  void readLatest();
+  const poll = window.setInterval(() => void readLatest(), 500);
 
   return () => {
     cancelled = true;
+    window.clearInterval(poll);
     void supabase.removeChannel(channel);
   };
 };

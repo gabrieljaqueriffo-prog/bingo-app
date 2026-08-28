@@ -89,30 +89,34 @@ export const subscribeBrosRoom = (code: string, onUpdate: (row: BrosRoom) => voi
   let lastRev = -1;
   let cancelled = false;
 
+  const readLatest = async () => {
+    try {
+      const row = await fetchBrosRoom(code);
+      if (row && !cancelled && row.rev > lastRev) {
+        lastRev = row.rev;
+        onUpdate(row);
+      }
+    } catch {
+      // Realtime or the next polling attempt can recover the connection.
+    }
+  };
+
   const channel = supabase
     .channel(`room-${code}`)
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "rooms", filter: `code=eq.${code}` },
-      async () => {
-        const row = await fetchBrosRoom(code);
-        if (row && !cancelled && row.rev > lastRev) {
-          lastRev = row.rev;
-          onUpdate(row);
-        }
-      },
+      readLatest,
     )
     .subscribe();
 
-  void fetchBrosRoom(code).then((row) => {
-    if (row && !cancelled) {
-      lastRev = Math.max(lastRev, row.rev);
-      onUpdate(row);
-    }
-  });
+  void readLatest();
+  // Respaldo para proyectos donde la publicación supabase_realtime aún no incluye rooms.
+  const poll = window.setInterval(() => void readLatest(), 500);
 
   return () => {
     cancelled = true;
+    window.clearInterval(poll);
     void supabase.removeChannel(channel);
   };
 };

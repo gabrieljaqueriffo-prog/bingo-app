@@ -5,7 +5,7 @@
   flex-direction: column;
   gap: 1rem;
   background: linear-gradient(180deg, #0d2b45 0%, #071527 100%);
-  color: #e8f4ff;
+  color: #f5fbff;
 }
 .nv-head {
   display: flex; align-items: center; justify-content: space-between; gap: .75rem;
@@ -23,7 +23,7 @@
   border-radius: 24px; border: 1px solid rgba(255,255,255,.08);
 }
 .nv-hero h2 { margin: .25rem 0 .75rem; font-size: 1.5rem; }
-.nv-hero p { color: #bcd7ea; margin: 0 0 .5rem; }
+.nv-hero p { color: #d8eaf5; margin: 0 0 .5rem; }
 .nv-hero .primary { margin-top: .5rem; }
 
 .nv-form { display: flex; flex-direction: column; gap: .75rem; }
@@ -47,12 +47,12 @@
 
 .nv-turn {
   background: rgba(88,193,255,.12); border: 1px solid rgba(88,193,255,.3);
-  padding: .7rem 1rem; border-radius: 12px; text-align: center;
+  color: #f5fbff; padding: .7rem 1rem; border-radius: 12px; text-align: center;
 }
 .nv-turn.me { background: rgba(98,209,155,.12); border-color: rgba(98,209,155,.4); }
 
 .nv-grid-block h3 {
-  margin: .25rem 0 .5rem; font-size: .95rem; color: #bcd7ea; text-align: center;
+  margin: .25rem 0 .5rem; font-size: .95rem; color: #d8eaf5; text-align: center;
 }
 .nv-grid {
   display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px;

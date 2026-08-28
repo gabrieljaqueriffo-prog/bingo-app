@@ -35,6 +35,7 @@ import {
   updateBrosRoom,
   type BrosRoom,
 } from "./remote";
+import { isSupabaseConfigured, supabaseKeyError } from "../../lib/supabase";
 import "./bros.css";
 import { ChevronLeft, ChevronRight, ChevronUp, Share2 } from "lucide-react";
 
@@ -64,14 +65,20 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
   const doJoin = (code: string) => {
     const clean = code.trim().toUpperCase();
     if (!/^[A-Z0-9]{4,8}$/.test(clean)) return;
-    void joinBrosRoom(clean).then((res) => {
-      if (res === "missing") { setError("La sala no existe."); return; }
-      revRef.current = res.rev;
-      setRoom(res);
-      setGame(res.state);
-      setSelfId("blue");
-      window.location.hash = `#sala=${clean}&juego=bros`;
-    });
+    if (!isSupabaseConfigured) {
+      setError(supabaseKeyError ?? "Configura VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en un archivo .env.");
+      return;
+    }
+    void joinBrosRoom(clean)
+      .then((res) => {
+        if (res === "missing") { setError("La sala no existe."); return; }
+        revRef.current = res.rev;
+        setRoom(res);
+        setGame(res.state);
+        setSelfId("blue");
+        window.location.hash = `#sala=${clean}&juego=bros`;
+      })
+      .catch(() => setError("No se pudo conectar con la sala. Revisa la configuración de Supabase."));
   };
 
   useEffect(() => {
@@ -80,14 +87,22 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
   }, [urlCode]);
 
   const createRoom = async () => {
-    const res = await createBrosRoom(mode);
-    if (!res) { setError("No se pudo crear la sala."); return; }
-    const row = await fetchBrosRoom(res.code);
-    if (!row) return;
-    revRef.current = row.rev;
-    setRoom(row);
-    setGame(row.state);
-    setSelfId("red");
+    if (!isSupabaseConfigured) {
+      setError(supabaseKeyError ?? "Configura VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en un archivo .env.");
+      return;
+    }
+    try {
+      const res = await createBrosRoom(mode);
+      if (!res) { setError("No se pudo crear la sala. Revisa la tabla rooms y sus políticas en Supabase."); return; }
+      const row = await fetchBrosRoom(res.code);
+      if (!row) { setError("La sala se creó, pero no se pudo leer. Revisa las políticas de Supabase."); return; }
+      revRef.current = row.rev;
+      setRoom(row);
+      setGame(row.state);
+      setSelfId("red");
+    } catch {
+      setError("No se pudo conectar con Supabase. Revisa tu archivo .env y la configuración del proyecto.");
+    }
   };
 
   const commitGame = async (code: string, state: BrosGameState) => {
@@ -184,7 +199,7 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
           let np = dir ? applyInput(p, dir) : applyInput(p, "stop");
           np = applyGravity(np);
           np = resolveCollisions(np, g.tiles);
-          np = { ...np, x: np.x + np.vx };
+          np = { ...np, x: np.x + np.vx, y: np.y + np.vy };
           // Saltar encima de un enemigo: lo destruye (o golpea al jefe) y rebotá.
           const stomp = stompEnemy(np, enemies);
           enemies = stomp.enemies;

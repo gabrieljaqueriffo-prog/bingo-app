@@ -50,11 +50,11 @@ export const fetchMentRoom = async (code: string): Promise<MentRow | null> => {
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from("rooms")
-    .select("code, rev, state")
+    .select("code, rev, payload")
     .eq("code", code.toUpperCase())
     .maybeSingle();
   if (error || !data) return null;
-  return { code: data.code, rev: data.rev as number, state: data.state as GameState };
+  return { code: data.code, rev: data.rev as number, state: (data.payload as { state: GameState }).state };
 };
 
 // Guarda el estado con control de versión. Reintenta si alguien escribió antes.
@@ -72,7 +72,7 @@ export const updateMentRoom = async (
     const nextRev = row.rev + 1;
     const { error } = await supabase
       .from("rooms")
-      .update({ state, rev: nextRev })
+      .update({ payload: { state }, rev: nextRev })
       .eq("code", code)
       .lt("rev", nextRev);
     if (!error) return { code, rev: nextRev, state };
@@ -90,7 +90,7 @@ export const createMentRoom = async (
   const code = makeMentCode();
   // El anfitrión es el jugador 1 (p1); el invitado se usará al unirse.
   const state = startGame([name, "Jugador 2"]);
-  const row = { code, kind: "mentiroso", rev: 1, state };
+  const row = { code, kind: "mentiroso", rev: 1, payload: { state } };
   const { error } = await supabase.from("rooms").insert(row);
   if (error) return null;
   remember(code, "host");
@@ -150,9 +150,18 @@ export const subscribeMentRoom = (
       onUpdate(row);
     }
   });
+  const poll = window.setInterval(() => {
+    void fetchMentRoom(code).then((row) => {
+      if (row && !cancelled && row.rev > lastRev) {
+        lastRev = row.rev;
+        onUpdate(row);
+      }
+    }).catch(() => {});
+  }, 500);
 
   return () => {
     cancelled = true;
+    window.clearInterval(poll);
     void supabase.removeChannel(channel);
   };
 };

@@ -160,9 +160,18 @@ export const subscribeStopRoom = (
       onUpdate(row);
     }
   });
+  const poll = window.setInterval(() => {
+    void fetchStopRoom(code).then((row) => {
+      if (row && !cancelled && row.rev > lastRev) {
+        lastRev = row.rev;
+        onUpdate(row);
+      }
+    }).catch(() => {});
+  }, 500);
 
   return () => {
     cancelled = true;
+    window.clearInterval(poll);
     void supabase.removeChannel(channel);
   };
 };

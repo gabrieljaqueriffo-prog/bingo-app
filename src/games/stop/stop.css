@@ -5,7 +5,7 @@
   flex-direction: column;
   gap: 1rem;
   background: linear-gradient(180deg, #123423 0%, #08170f 100%);
-  color: #e9fbe8;
+  color: #f4fff5;
 }
 .st-head {
   display: flex; align-items: center; justify-content: space-between; gap: .75rem;
@@ -24,7 +24,7 @@
   border: 1px solid rgba(255,255,255,.08);
 }
 .st-hero h2 { margin: .25rem 0 .75rem; font-size: 1.5rem; }
-.st-hero p { color: #c3e0bd; margin: 0 0 .5rem; }
+.st-hero p { color: #d9f0d5; margin: 0 0 .5rem; }
 .st-hero .primary { margin-top: .5rem; }
 .st-code {
   font: 700 44px Fraunces, serif; letter-spacing: .22em; margin-left: .22em;
@@ -62,11 +62,11 @@
 
 .st-letterbar {
   display: flex; align-items: center; justify-content: space-between;
-  background: rgba(255,217,122,.1); border: 1px solid rgba(255,217,122,.3);
+  background: rgba(255,217,122,.16); border: 1px solid rgba(255,217,122,.45);
   border-radius: 16px; padding: .6rem 1rem;
 }
 .big-letter { font: 700 40px Fraunces, serif; color: #ffd97a; }
-.st-letterbar .meta { color: #c3e0bd; font-size: .95rem; }
+.st-letterbar .meta { color: #e0f2dc; font-size: .95rem; }
 
 .st-writing { display: flex; flex-direction: column; gap: .55rem; }
 .st-writing label { display: grid; grid-template-columns: 110px 1fr; align-items: center; gap: .5rem; }

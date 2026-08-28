@@ -146,15 +146,21 @@ export const subscribeNavalRoom = (
     )
     .subscribe();
 
-  void fetchNavalRoom(code).then((row) => {
-    if (row && !cancelled) {
-      lastRev = Math.max(lastRev, row.rev);
-      onUpdate(row);
-    }
-  });
+  const readLatest = async () => {
+    try {
+      const row = await fetchNavalRoom(code);
+      if (row && !cancelled && row.rev > lastRev) {
+        lastRev = row.rev;
+        onUpdate(row);
+      }
+    } catch {}
+  };
+  void readLatest();
+  const poll = window.setInterval(() => void readLatest(), 500);
 
   return () => {
     cancelled = true;
+    window.clearInterval(poll);
     void supabase.removeChannel(channel);
   };
 };
