@@ -569,9 +569,11 @@ export default function App() {
   if (view === "bros") return <BrosApp onExit={() => setView("home")} />;
   if (view === "conecta4") return <Conecta4App onExit={() => setView("home")} />;
   if (view === "conecta4-online") return <Conecta4RemoteApp onExit={() => setView("home")} />;
-  if (view === "stop-online") return <StopRemoteApp onExit={() => setView("home")} />;
+    if (view === "stop-online") return <StopRemoteApp onExit={() => setView("home")} />;
   return null;
 }
+
+// Deploy trigger: 2026-08-27T12:00:00Z
 
 function Home({
   game,
