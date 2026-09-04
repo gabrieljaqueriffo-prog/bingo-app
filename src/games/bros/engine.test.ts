@@ -7,13 +7,18 @@ import {
   resolveCollisions,
   reachFlag,
   collectCoins,
+  collectPower,
+  collectHeart,
   makeLevel,
   updateEnemies,
   hitEnemy,
   stompEnemy,
   BOSS_HP,
+  COYOTE_FRAMES,
   type Enemy,
+  type BrosMode,
   SCREEN_HEIGHT,
+  SCREEN_WIDTH,
   MOVE_SPEED,
   JUMP_FORCE,
   GRAVITY,
@@ -34,6 +39,8 @@ describe("Super Bros Engine", () => {
     height: 48,
     jumped: false,
     anim: 0,
+    coyote: 0,
+    shields: 0,
   };
 
   it("should start with two players and valid dimensions", () => {
@@ -125,11 +132,35 @@ describe("Super Bros Engine", () => {
     expect(respawned.y).toBe(300);
   });
 
-  it("should spawn enemies and a final boss in temple level 3", () => {
+  it("should spawn enemies, a flyer and a final boss in temple level 3", () => {
     const level3 = makeLevel("temple", 3, [basePlayer, { ...basePlayer, id: "blue", x: 160 }]);
-    expect(level3.enemies.length).toBe(3);
+    expect(level3.enemies.length).toBe(4);
     expect(level3.enemies.some((e) => e.boss)).toBe(true);
+    expect(level3.enemies.some((e) => e.flyer)).toBe(true);
     expect(level3.level).toBe(3);
+  });
+
+  it("should have multi-screen worlds (scroll) with the flag far to the right", () => {
+    const modes: BrosMode[] = ["race", "coins", "lives", "coop", "temple"];
+    for (const mode of modes) {
+      const state = createInitialGameState(mode);
+      // El mundo es más ancho que una pantalla.
+      expect(state.worldW).toBeGreaterThan(SCREEN_WIDTH);
+      // La meta queda fuera de la primera pantalla: hay que recorrer el mundo.
+      const flag = state.tiles.find((t) => t.type === "flag");
+      expect(flag).toBeDefined();
+      expect(flag!.x).toBeGreaterThan(SCREEN_WIDTH);
+      // Todas las compuertas quedan antes de la meta.
+      for (const gate of state.tiles.filter((t) => t.type === "gate")) {
+        expect(gate.x).toBeLessThan(flag!.x);
+      }
+    }
+  });
+
+  it("should not walk off the left edge of the world", () => {
+    const p = { ...basePlayer, x: 2, vx: -MOVE_SPEED, onGround: true };
+    const clamped = resolveCollisions(p, createInitialGameState().tiles);
+    expect(clamped.x).toBeGreaterThanOrEqual(0);
   });
 
   it("should bounce enemies between their patrol limits", () => {
@@ -166,5 +197,91 @@ describe("Super Bros Engine", () => {
       enemies = r.enemies;
     }
     expect(enemies.length).toBe(0);
+  });
+
+  it("should give coins when stomping enemies (1 for normal, 3 for the boss)", () => {
+    const normal = { id: "e", x: 300, y: 320, w: 28, h: 40, minX: 0, maxX: 800, dir: 1, speed: 2, boss: false };
+    const stomper = { ...basePlayer, x: 305, y: 290, vy: 6 };
+    const rn = stompEnemy(stomper, [normal] as Enemy[]);
+    expect(rn.enemies.length).toBe(0);
+    expect(rn.coins).toBe(1);
+
+    const boss = { id: "boss", x: 300, y: 300, w: 46, h: 66, minX: 0, maxX: 800, dir: 1, speed: 2, boss: true, hp: 1 };
+    const rb = stompEnemy(stomper, [boss] as Enemy[]);
+    expect(rb.enemies.length).toBe(0);
+    expect(rb.coins).toBe(3);
+  });
+
+  it("should cut the jump when released (variable jump height)", () => {
+    const p = { ...basePlayer, vy: JUMP_FORCE, jumped: true };
+    const cut = applyInput(p, "jumpcut");
+    expect(cut.vy).toBeLessThan(0); // sigue subiendo, pero más despacio
+    expect(Math.abs(cut.vy)).toBeLessThan(Math.abs(JUMP_FORCE));
+  });
+
+  it("should allow a coyote-time jump right after leaving a ledge", () => {
+    const p = { ...basePlayer, onGround: false, jumped: false, coyote: 6, vy: 4 };
+    const jumped = applyInput(p, "up");
+    expect(jumped.vy).toBe(JUMP_FORCE);
+    expect(jumped.coyote).toBe(0); // la ventana se consume al saltar
+  });
+
+  it("should refresh coyote frames while standing and drain them off a ledge", () => {
+    const tiles = createInitialGameState().tiles;
+    let p = { ...basePlayer, y: SCREEN_HEIGHT - 85, vy: 8, onGround: false, coyote: 0 };
+    p = resolveCollisions(p, tiles);
+    expect(p.onGround).toBe(true);
+    expect(p.coyote).toBe(COYOTE_FRAMES);
+    // En el aire (sin tiles sólidos), la ventana se agota gradualmente.
+    const air = resolveCollisions({ ...p, onGround: false, y: p.y - 2, coyote: p.coyote }, []);
+    expect(air.coyote).toBeLessThan(COYOTE_FRAMES);
+  });
+
+  it("should give a shield when collecting a power star", () => {
+    const tiles = createInitialGameState().tiles;
+    const star = tiles.find((t) => t.type === "power")!;
+    expect(star).toBeDefined();
+    const p = { ...basePlayer, x: star.x - 5, y: star.y - 5 };
+    const { player, collected } = collectPower(p, tiles);
+    expect(collected.length).toBe(1);
+    expect(player.shields).toBe(1);
+    // No se pueden acumular más de 3 escudos.
+    const capped = collectPower({ ...player, x: star.x - 5, y: star.y - 5, shields: 3 }, tiles);
+    expect(capped.player.shields).toBe(3);
+  });
+
+  it("should give an extra life when collecting a heart (1UP)", () => {
+    const tiles = createInitialGameState().tiles;
+    const heart = tiles.find((t) => t.type === "heart")!;
+    expect(heart).toBeDefined();
+    const p = { ...basePlayer, x: heart.x - 5, y: heart.y - 5, lives: 2 };
+    const { player, collected } = collectHeart(p, tiles);
+    expect(collected.length).toBe(1);
+    expect(player.lives).toBe(3);
+    // Tope de vidas: no pasa de MAX_LIVES (9).
+    const capped = collectHeart({ ...player, x: heart.x - 5, y: heart.y - 5, lives: 9 }, tiles);
+    expect(capped.player.lives).toBe(9);
+    // Si el corazón ya se recogió, no vuelve a sumar.
+    const again = collectHeart({ ...player, x: heart.x - 5, y: heart.y - 5, lives: 3 }, [
+      { ...heart, collected: true },
+    ]);
+    expect(again.collected.length).toBe(0);
+    expect(again.player.lives).toBe(3);
+  });
+
+  it("should place power stars and a heart in every stage", () => {
+    const modes: BrosMode[] = ["race", "coins", "lives", "coop", "temple"];
+    for (const mode of modes) {
+      const state = createInitialGameState(mode);
+      expect(state.tiles.some((t) => t.type === "power")).toBe(true);
+      expect(state.tiles.some((t) => t.type === "heart")).toBe(true);
+    }
+  });
+
+  it("should make flyer enemies bob vertically while patrolling", () => {
+    const flyer = { id: "f", x: 400, y: 300, baseY: 300, w: 24, h: 24, minX: 300, maxX: 700, dir: 1, speed: 2, flyer: true, phase: 0 } as Enemy;
+    const moved = updateEnemies([flyer])[0];
+    expect(moved.y).not.toBe(300); // cambió la altura por el aleteo
+    expect(moved.phase).toBeGreaterThan(0);
   });
 });

@@ -34,6 +34,6 @@ create policy "salas legibles" on public.rooms for select using (true);
 drop policy if exists "salas creables" on public.rooms;
 create policy "salas creables" on public.rooms for insert with check (true);
 drop policy if exists "salas editables" on public.rooms;
-create policy "salas editables" on public.rooms for update using (true);
+create policy "salas editables" on public.rooms for update using (true) with check (true);
 drop policy if exists "salas borrables" on public.rooms;
 create policy "salas borrables" on public.rooms for delete using (true);

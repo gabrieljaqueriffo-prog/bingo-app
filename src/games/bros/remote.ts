@@ -10,7 +10,12 @@ import {
   resolveCollisions,
   type BrosGameState,
   type BrosMode,
+  type BrosPlayer,
+  type PlayerId,
 } from "./engine";
+import { type PlayerSnapshot } from "./interpolate";
+
+export type BROS_PLAYER_ID = PlayerId;
 
 export interface BrosRoom {
   code: string;
@@ -68,12 +73,14 @@ export const updateBrosRoom = async (
   return null;
 };
 
-export const createBrosRoom = async (mode: BrosMode): Promise<{ code: string } | null> => {
+export const createBrosRoom = async (
+  mode: BrosMode,
+): Promise<{ code: string } | { code: null; error: string }> => {
   const supabase = getSupabase();
   const code = makeBrosCode();
   const row = { code, kind: "bros", rev: 1, payload: { state: createInitialGameState(mode) } };
   const { error } = await supabase.from("rooms").insert(row);
-  if (error) { console.error("createBrosRoom:", error.message); return null; }
+  if (error) return { code: null, error: `${error.message} (código ${error.code ?? "?"})` };
   return { code };
 };
 
@@ -129,21 +136,25 @@ const rememberBrosRole = (code: string): void => {
 
 export const processInputs = (state: BrosGameState, inputs: Record<string, "left" | "right" | "up">): BrosGameState => {
   const next: BrosGameState = { ...state, players: [], tiles: [...state.tiles] };
+  const list: BrosPlayer[] = [];
 
   for (const player of state.players) {
     let p = { ...player };
     const input = inputs[player.id];
     if (input) p = applyInput(p, input);
     p = applyGravity(p);
-    p = resolveCollisions(p, next.tiles);
+    // Pasamos la lista completa para que las compuertas dobles/palancas de
+    // cooperativo tengan en cuenta a ambos jugadores.
+    p = resolveCollisions(p, next.tiles, [...list, p]);
     p.x += p.vx;
-    next.players.push(p);
+    list.push(p);
 
     if (reachFlag(p, next.tiles)) {
       next.winner = p.id;
       next.phase = "finished";
     }
   }
+  next.players = list;
 
   const { player: red, collected: rCoins } = collectCoins(next.players.find((p) => p.id === "red")!, next.tiles);
   const { player: blue, collected: bCoins } = collectCoins(next.players.find((p) => p.id === "blue")!, next.tiles);
@@ -159,4 +170,46 @@ export const processInputs = (state: BrosGameState, inputs: Record<string, "left
   });
 
   return next;
+};
+
+// --- Broadcast de posición en tiempo real (para suavizar el rival) -------
+// La base de datos (tabla `rooms`) es la fuente de verdad del estado; ademas,
+// cada jugador difunde su snapshot ~10 veces/seg por Realtime para que el rival
+// se dibuje con interpolación en vez de a saltos de 250ms.
+
+const PLAYER_EVENT = "player-pos";
+
+export interface PlayerBroadcast {
+  send: (s: PlayerSnapshot) => void;
+  stop: () => void;
+}
+
+// Crea el canal de broadcast, descarta los mensajes propios y llama `onRemote`
+// con cada snapshot del rival. Devuelve { send, stop } para emitir y limpiar.
+export const setupPlayerBroadcast = (
+  code: string,
+  selfId: BROS_PLAYER_ID,
+  onRemote: (s: PlayerSnapshot) => void,
+): PlayerBroadcast => {
+  const supabase = getSupabase();
+  const channel = supabase.channel(`bros-broadcast-${code}`, {
+    config: { broadcast: { self: false } },
+  });
+  channel
+    .on("broadcast", { event: PLAYER_EVENT }, ({ payload }) => {
+      const s = payload as PlayerSnapshot;
+      if (!s || s.id === selfId) return;
+      onRemote(s);
+    })
+    .subscribe();
+
+  const send = (s: PlayerSnapshot) => {
+    void channel.send({ type: "broadcast", event: PLAYER_EVENT, payload: s });
+  };
+
+  const stop = () => {
+    void supabase.removeChannel(channel);
+  };
+
+  return { send, stop };
 };

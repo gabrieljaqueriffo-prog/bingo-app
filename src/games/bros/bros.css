@@ -102,6 +102,21 @@
   padding: 0 1rem;
   z-index: 20;
   pointer-events: none;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.bros-pad-zone {
+  display: flex;
+  align-items: flex-end;
+  pointer-events: none;
+}
+.bros-pad-directions,
+.bros-pad-buttons {
+  display: flex;
+  gap: .7rem;
+  align-items: flex-end;
+  pointer-events: auto;
 }
 .bros-group { display: flex; gap: .8rem; }
 .bros-pad {
@@ -128,6 +143,30 @@
   border-color: rgba(230, 57, 70, 0.6);
 }
 .bros-pad.jump:active { background: rgba(230, 57, 70, 0.5); }
+.bros-pad.action {
+  width: 74px;
+  height: 74px;
+  border-radius: 16px;
+  background: rgba(88, 193, 255, 0.28);
+  border-color: rgba(88, 193, 255, 0.65);
+  color: #fff;
+}
+.bros-pad.action:active { background: rgba(88, 193, 255, 0.5); }
+.bros-pad.action .bros-pad-label {
+  font-size: .55rem;
+  letter-spacing: .08em;
+  font-weight: 700;
+}
+.bros-pad.emote {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: rgba(255, 159, 46, 0.22);
+  border-color: rgba(255, 159, 46, 0.55);
+  font-size: 1.3rem;
+  line-height: 1;
+}
+.bros-pad.emote:active { background: rgba(255, 159, 46, 0.45); }
 .bros-modes {
   display: grid;
   grid-template-columns: 1fr 1fr;
