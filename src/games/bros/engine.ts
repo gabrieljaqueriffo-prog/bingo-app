@@ -621,6 +621,16 @@ export function resolveCollisions(
   return p;
 }
 
+// Economía de monedas: cada COINS_PER_LIFE monedas se convierten
+// automáticamente en una vida extra. Es el "uso real" de recolectar:
+// pagar con monedas por supervivencia.
+export const COINS_PER_LIFE = 10;
+
+export function tradeCoinsForLife(player: BrosPlayer): BrosPlayer {
+  if (player.coins < COINS_PER_LIFE) return player;
+  return { ...player, coins: player.coins - COINS_PER_LIFE, lives: player.lives + 1 };
+}
+
 export function collectCoins(player: BrosPlayer, tiles: BrosTile[]): { player: BrosPlayer; collected: BrosTile[] } {
   const p = { ...player };
   const remaining: BrosTile[] = [];

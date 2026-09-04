@@ -7,6 +7,8 @@ import {
   collectPower,
   collectHeart,
   COIN_GOAL,
+  COINS_PER_LIFE,
+  tradeCoinsForLife,
   BOSS_HP,
   MAX_LEVELS,
   createInitialGameState,
@@ -131,7 +133,7 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
   };
 
   const commitGame = async (code: string, state: BrosGameState) => {
-    const updated = await updateBrosRoom(code, revRef.current, state);
+    const updated = await updateBrosRoom(code, revRef.current, state, selfIdRef.current);
     if (updated) {
       revRef.current = updated.rev;
       setRoom(updated);
@@ -263,6 +265,12 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
           players: updated.state.players.map((p) =>
             p.id === selfIdRef.current && keep ? keep : p,
           ),
+          // Las monedas/items que YO ya marqué como recolectados no renacen
+          // aunque el estado remoto venga con la copia vieja de los tiles.
+          tiles: updated.state.tiles.map((rt) => {
+            const lt = g.tiles.find((t) => t.type === rt.type && t.x === rt.x && t.y === rt.y);
+            return lt?.collected ? { ...rt, collected: true } : rt;
+          }),
         };
       });
     });
@@ -354,7 +362,9 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
           // estado; si solo tomáramos `player` quedarían infinitas.
           const { player, collected } = collectCoins(np, g.tiles);
           if (collected.length) collectedCoins.push(...collected);
-          const pw = collectPower(player, g.tiles);
+          // Economía: 10 monedas se convierten solas en una vida extra.
+          const withLife = tradeCoinsForLife(player);
+          const pw = collectPower(withLife, g.tiles);
           if (pw.collected.length) collectedPowers.push(...pw.collected);
           const hrt = collectHeart(pw.player, g.tiles);
           if (hrt.collected.length) collectedHearts.push(...hrt.collected);
@@ -678,19 +688,21 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
 
       // HUD fijo en pantalla.
       if (meNow) {
+        const coinsLabel =
+          g.mode === "coins"
+            ? `● ${meNow.coins}/${COIN_GOAL}`
+            : `● ${meNow.coins}/${COINS_PER_LIFE} → ♥`; // 10 monedas = 1 vida extra
         ctx.fillStyle = "#ffd700";
         ctx.font = "14px monospace";
         ctx.textAlign = "left";
-        ctx.fillText(g.mode === "coins" ? `● ${meNow.coins}/${COIN_GOAL}` : `● ${meNow.coins}`, 10, 22);
+        ctx.fillText(coinsLabel, 10, 22);
         if ((meNow.shields ?? 0) > 0) {
           ctx.fillStyle = "#ff9f2e";
           ctx.fillText(`★ ${meNow.shields}`, 10, 40);
         }
-        if (g.mode === "lives") {
-          ctx.fillStyle = "#e63946";
-          ctx.textAlign = "right";
-          ctx.fillText("♥".repeat(Math.max(0, meNow.lives)) || "—", SCREEN_WIDTH - 10, 22);
-        }
+        ctx.fillStyle = "#e63946";
+        ctx.textAlign = "right";
+        ctx.fillText("♥".repeat(Math.max(0, meNow.lives)) || "—", SCREEN_WIDTH - 10, 22);
       }
       if (g.mode === "coop" || g.mode === "temple") {
         ctx.fillStyle = "rgba(255,255,255,.75)";

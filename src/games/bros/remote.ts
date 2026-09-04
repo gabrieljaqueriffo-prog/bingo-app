@@ -53,6 +53,7 @@ export const updateBrosRoom = async (
   code: string,
   currentRev: number,
   state: BrosGameState,
+  selfId?: PlayerId,
   attempts = 4,
 ): Promise<BrosRoom | null> => {
   const supabase = getSupabase();
@@ -60,18 +61,43 @@ export const updateBrosRoom = async (
   if (!row || row.rev < currentRev) return null;
   for (let i = 0; i < attempts; i++) {
     const nextRev = row.rev + 1;
+    // Merge antes de escribir: nunca "des-recolectamos" tiles que el otro
+    // jugador ya agarró, y el rival conserva SU jugador simulado.
+    const payloadState = selfId ? mergeBrosStates(state, row.state, selfId) : state;
     const { error } = await supabase
       .from("rooms")
-      .update({ payload: { state }, rev: nextRev })
+      .update({ payload: { state: payloadState }, rev: nextRev })
       .eq("code", code)
       .lt("rev", nextRev);
-    if (!error) return { code, rev: nextRev, state };
+    if (!error) return { code, rev: nextRev, state: payloadState };
     await new Promise((r) => setTimeout(r, 250 * (i + 1)));
     row = await fetchBrosRoom(code);
     if (!row || row.rev < currentRev) return null;
   }
   return null;
 };
+
+// Combina el estado local con el remoto sin perder progreso de ninguno:
+// - cada jugador conserva SU copia simulada de sí mismo;
+// - los tiles (monedas/estrellas/corazones) quedan recolectados si CUALQUIERA
+//   de los dos los marcó (así las monedas no "renacen" por el sync);
+// - el rival aporta enemigos/mundo por ser la versión más fresca de la sala.
+export const mergeBrosStates = (
+  local: BrosGameState,
+  remote: BrosGameState,
+  selfId: PlayerId,
+): BrosGameState => ({
+  ...remote,
+  players: remote.players.map((rp) =>
+    rp.id === selfId ? (local.players.find((p) => p.id === selfId) ?? rp) : rp,
+  ),
+  tiles: remote.tiles.map((rt) => {
+    const lt = local.tiles.find((t) => t.type === rt.type && t.x === rt.x && t.y === rt.y);
+    return lt?.collected ? { ...rt, collected: true } : rt;
+  }),
+  winner: local.winner ?? remote.winner,
+  phase: local.phase === "finished" || remote.phase === "finished" ? "finished" : remote.phase,
+});
 
 export const createBrosRoom = async (
   mode: BrosMode,

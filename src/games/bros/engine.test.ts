@@ -13,6 +13,7 @@ import {
   updateEnemies,
   hitEnemy,
   stompEnemy,
+  tradeCoinsForLife,
   BOSS_HP,
   COYOTE_FRAMES,
   type Enemy,
@@ -23,7 +24,6 @@ import {
   JUMP_FORCE,
   GRAVITY,
 } from "./engine";
-
 describe("Super Bros Engine", () => {
   const basePlayer: BrosPlayer = {
     id: "red",
@@ -229,6 +229,14 @@ describe("Super Bros Engine", () => {
     const rb = stompEnemy(stomper, [boss] as Enemy[]);
     expect(rb.enemies.length).toBe(0);
     expect(rb.coins).toBe(3);
+  });
+
+  it("should trade 10 coins for an extra life automatically", () => {
+    const p = { ...basePlayer, coins: 9, lives: 2 };
+    expect(tradeCoinsForLife(p).lives).toBe(2); // aún no alcanza
+    const traded = tradeCoinsForLife({ ...basePlayer, coins: 10, lives: 2 });
+    expect(traded.coins).toBe(0);
+    expect(traded.lives).toBe(3);
   });
 
   it("should cut the jump when released (variable jump height)", () => {
