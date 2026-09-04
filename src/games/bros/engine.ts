@@ -326,21 +326,30 @@ export function hitEnemy(p: BrosPlayer, enemies: Enemy[]): boolean {
 }
 
 // Salto encima de un enemigo: lo destruye (normal) o le saca vida al jefe.
-// Devuelve los enemigos actualizados y si hubo un "piso justo" (rebote).
+// Acepta `prevFeetY` (posición de los pies ANTES de moverse este tick) para
+// detectar el cruce del plano superior aunque el jugador "salte" la ventana
+// por caer rápido (tunneling). Devuelve enemigos actualizados y si hubo rebote.
 export function stompEnemy(
   player: BrosPlayer,
   enemies: Enemy[],
+  prevFeetY?: number,
 ): { enemies: Enemy[]; bounced: boolean; coins: number } {
   let bounced = false;
   let coins = 0;
+  const feet = player.y + player.height;
   const next = enemies.map((e) => {
     if ((e.stun ?? 0) > 0) return e; // no se puede golpear mientras se recupera
     const touchX = player.x < e.x + e.w && player.x + player.width > e.x;
     const falling = player.vy > 0;
     const feetJustAbove =
-      player.y + player.height >= e.y &&
-      player.y + player.height <= e.y + e.h * 0.65;
-    if (touchX && falling && feetJustAbove) {
+      feet >= e.y &&
+      feet <= e.y + e.h * 0.65;
+    // Swept: este tick los pies cruzaron el techo del enemigo desde arriba.
+    const crossedTop =
+      prevFeetY !== undefined &&
+      prevFeetY <= e.y + 2 &&
+      feet >= e.y;
+    if (touchX && falling && (feetJustAbove || crossedTop)) {
       bounced = true;
       if (e.boss) {
         const nhp = (e.hp ?? 1) - 1;

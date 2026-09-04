@@ -199,6 +199,25 @@ describe("Super Bros Engine", () => {
     expect(enemies.length).toBe(0);
   });
 
+  it("should stomp via swept detection when falling fast (anti-tunneling)", () => {
+    const enemy = { id: "e", x: 300, y: 320, w: 28, h: 40, minX: 0, maxX: 800, dir: 1, speed: 2, boss: false } as Enemy;
+    // Cayendo a MAX_FALL_SPEED: los pies pasan de estar ENCIMA del enemigo a
+    // atravesarlo en un solo tick; la ventana estática no alcanza, el cruce sí.
+    const prevFeetY = 315; // por encima de e.y = 320
+    const now = { ...basePlayer, x: 305, y: 340, vy: 15 }; // pies = 388 (fuera de ventana)
+    const r = stompEnemy(now, [enemy], prevFeetY);
+    expect(r.bounced).toBe(true);
+    expect(r.enemies.length).toBe(0);
+    expect(r.coins).toBe(1);
+    // Sin prevFeetY (comportamiento anterior): NO hay stomp.
+    const r2 = stompEnemy(now, [{ ...enemy }]);
+    expect(r2.bounced).toBe(false);
+    // Cruce desde abajo (subiendo) NO cuenta como stomp.
+    const rising = { ...basePlayer, x: 305, y: 340, vy: -8 };
+    const r3 = stompEnemy(rising, [{ ...enemy }], 388);
+    expect(r3.bounced).toBe(false);
+  });
+
   it("should give coins when stomping enemies (1 for normal, 3 for the boss)", () => {
     const normal = { id: "e", x: 300, y: 320, w: 28, h: 40, minX: 0, maxX: 800, dir: 1, speed: 2, boss: false };
     const stomper = { ...basePlayer, x: 305, y: 290, vy: 6 };

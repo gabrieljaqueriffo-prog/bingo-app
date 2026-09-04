@@ -329,10 +329,11 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
             // Pasamos TODOS los jugadores: las placas dobles y palancas exigen
             // saber dónde está el compañero; en coop, caer = burbuja (opts.coop).
             np = resolveCollisions(np, g.tiles, g.players, { coop });
+            const prevFeetY = np.y + np.height; // para stomp "swept" anti-tunneling
             np = { ...np, x: np.x + np.vx, y: np.y + np.vy };
             // Saltar encima de un enemigo: lo destruye (o golpea al jefe), rebotá
             // y ganás monedas. Pero si lo pisaste (bounced) no te puede golpear.
-            const stomp = stompEnemy(np, enemies);
+            const stomp = stompEnemy(np, enemies, prevFeetY);
             enemies = stomp.enemies;
             if (stomp.bounced) {
               np = { ...np, vy: -10, onGround: false, jumped: false };
