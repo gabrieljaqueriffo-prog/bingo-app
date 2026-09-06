@@ -751,10 +751,13 @@ export function pushCrates(
           c.y < t.y + t.h && c.y + c.h > t.y,
       );
       if (blocked) continue;
-      c.x = nx;
+            c.x = nx;
       // El empujador queda pegado al borde de la caja.
       const i = np.findIndex((q) => q.id === p.id);
-  // Gravedad de las cajas: si no tienen suelo debajo, caen.
+      np[i] = d > 0 ? { ...np[i], x: c.x - p.width } : { ...np[i], x: c.x + c.w };
+    }
+  }
+  // Las cajas no escapan del mundo y caen si no tienen suelo.
   for (const c of nt) {
     if (c.type !== "crate") continue;
     const groundBelow = nt.some(
@@ -777,28 +780,7 @@ export function pushCrates(
         }
       }
       c.y = Math.min(ny, SCREEN_HEIGHT - c.h);
-      c.x = Math.max(0, c.x);
-    }
-  }
-      np[i] = d > 0 ? { ...np[i], x: c.x - p.width } : { ...np[i], x: c.x + c.w };
-    }
-  }
-  for (const c of nt) {
-    if (c.type === "crate") c.x = Math.max(0, c.x);
-  }
-  // Gravedad de las cajas: si no hay suelo debajo, caen (y pueden arrastrar
-  // al jugador que esté parado encima).
-  for (const c of nt) {
-    if (c.type !== "crate") continue;
-    const soporte = nt.some(
-      (t) =>
-        t !== c &&
-        (t.type === "ground" || t.type === "platform" || t.type === "crate") &&
-        c.x < t.x + t.w && c.x + c.w > t.x &&
-        c.y + c.h >= t.y && c.y + c.h <= t.y + 6,
-    );
-    if (!soporte && c.y + c.h < SCREEN_HEIGHT) {
-      c.y = Math.min(c.y + 4, SCREEN_HEIGHT - c.h);
+            c.x = Math.max(0, c.x);
     }
   }
   return { players: np, tiles: nt };
