@@ -644,6 +644,27 @@ export function applyInput(player: BrosPlayer, input: "left" | "right" | "up" | 
   return p;
 }
 
+// Caja con gravedad: si no tiene suelo debajo, cae (igual que el jugador).
+// Se llama una vez por frame DESPUÉS de pushCrates.
+export function crateGravity(tiles: BrosTile[]): BrosTile[] {
+  const GRAVITY = 0.5;
+  const nt = tiles.map((t) => ({ ...t }));
+  for (const c of nt) {
+    if (c.type !== "crate") continue;
+    // Buscar sólido justo debajo de la cixa.
+    const solidBelow = nt.some(
+      (t) =>
+        t !== c &&
+        (t.type === "ground" || t.type === "platform") &&
+        c.x < t.x + t.w && c.x + c.w > t.x &&
+        c.y + c.h >= t.y && c.y + c.h <= t.y + 4,
+    );
+    if (!solidBelow) {
+      c.y = Math.min(c.y + GRAVITY * 3, 1000); // cae rápido
+    }
+  }
+  return nt;
+}
 export function applyGravity(player: BrosPlayer): BrosPlayer {
   const p = { ...player };
   if (p.vy < MAX_FALL_SPEED) p.vy += GRAVITY;
@@ -733,11 +754,52 @@ export function pushCrates(
       c.x = nx;
       // El empujador queda pegado al borde de la caja.
       const i = np.findIndex((q) => q.id === p.id);
+  // Gravedad de las cajas: si no tienen suelo debajo, caen.
+  for (const c of nt) {
+    if (c.type !== "crate") continue;
+    const groundBelow = nt.some(
+      (t) =>
+        t !== c &&
+        (t.type === "ground" || t.type === "platform") &&
+        c.x < t.x + t.w && c.x + c.w > t.x &&
+        c.y + c.h >= t.y && c.y + c.h <= t.y + 8,
+    );
+    if (!groundBelow) {
+      const fall = GRAVITY * 2;
+      let ny = c.y + fall;
+      // Detener al tocar suelo.
+      for (const t of nt) {
+        if (t === c) continue;
+        if (t.type === "ground" || t.type === "platform") {
+          if (c.x < t.x + t.w && c.x + c.w > t.x && ny + c.h > t.y && c.y + c.h <= t.y + 1) {
+            ny = t.y - c.h;
+          }
+        }
+      }
+      c.y = Math.min(ny, SCREEN_HEIGHT - c.h);
+      c.x = Math.max(0, c.x);
+    }
+  }
       np[i] = d > 0 ? { ...np[i], x: c.x - p.width } : { ...np[i], x: c.x + c.w };
     }
   }
   for (const c of nt) {
     if (c.type === "crate") c.x = Math.max(0, c.x);
+  }
+  // Gravedad de las cajas: si no hay suelo debajo, caen (y pueden arrastrar
+  // al jugador que esté parado encima).
+  for (const c of nt) {
+    if (c.type !== "crate") continue;
+    const soporte = nt.some(
+      (t) =>
+        t !== c &&
+        (t.type === "ground" || t.type === "platform" || t.type === "crate") &&
+        c.x < t.x + t.w && c.x + c.w > t.x &&
+        c.y + c.h >= t.y && c.y + c.h <= t.y + 6,
+    );
+    if (!soporte && c.y + c.h < SCREEN_HEIGHT) {
+      c.y = Math.min(c.y + 4, SCREEN_HEIGHT - c.h);
+    }
   }
   return { players: np, tiles: nt };
 }
@@ -769,7 +831,6 @@ export function resolveCollisions(
     (t) =>
       t.type === "ground" ||
       t.type === "platform" ||
-      t.type === "crate" || // se puede subir encima de las cajas
       (t.type === "gate" && !gateOpen(tiles, t.pair ?? 0, players)),
   );
 
