@@ -32,16 +32,19 @@ export interface BrosPlayer {
   shields: number; // escudos de estrella (aguantan un golpe de enemigo sin perder vida)
   // --- Mecánicas cooperativas ---
   isBubble?: boolean; // ¿está atrapado en una burbuja esperando rescate?
+  caged?: boolean; // jaula estilo Donkey Kong: tu pareja te libera saltando encima
+  cageT?: number; // frames para auto-liberación si ambos quedan enjaulados
   carrying?: PlayerId | null; // ¿a quién lleva sobre la cabeza?
   carriedBy?: PlayerId | null; // ¿quién lo lleva a él?
   interactCd?: number; // frames de enfriamiento para cargar/lanzar
   emote?: string | null; // emote rápido mostrado encima del jugador
   emoteT?: number; // frames restantes del emote
+  hooking?: { x: number; y: number } | null; // gancho activo: punto anclado de la cuerda
 }
 
 export type TileType =
   | "ground" | "platform" | "coin" | "flag"
-  | "plate" | "gate" | "lever" | "power" | "heart";
+  | "plate" | "gate" | "lever" | "power" | "heart" | "hook" | "crate";
 
 export interface BrosTile {
   type: TileType;
@@ -52,11 +55,12 @@ export interface BrosTile {
   collected?: boolean;
   pair?: number; // une placa (o palanca) y compuerta en el modo cooperación
   both?: boolean; // placa doble: requiere el peso de ambos jugadores a la vez
+  latched?: boolean; // reja: quedó abierta de forma permanente (latch)
 }
 
 export type Phase = "lobby" | "playing" | "finished";
 
-export type BrosMode = "race" | "coins" | "lives" | "coop" | "temple";
+export type BrosMode = "race" | "coins" | "lives" | "coop" | "temple" | "story";
 export const COIN_GOAL = 8;
 export const BOSS_HP = 3;
 export const MAX_LEVELS = 3;
@@ -69,11 +73,17 @@ export const MAX_LIVES = 9;
 // --- Mecánicas cooperativas: llevar/lanzar, burbuja de rescate, palancas ----
 export const THROW_SPEED = 14; // velocidad horizontal al lanzar a la pareja
 export const THROW_UP = -14;   // impulso vertical al lanzar a la pareja
-export const GRAB_RANGE = 46;  // distancia máxima para cargar a la pareja
+export const GRAB_RANGE = 90;  // distancia máxima para cargar a la pareja (generoso: es toque, no puntería)
+export const GRAB_DY = 80;     // diferencia de altura máxima para poder cargar
 export const GRAB_CD = 24;     // frames de enfriamiento tras cargar/lanzar
 export const BUBBLE_TOP = 130; // altura a la que flota la burbuja de rescate
 export const BUBBLE_RISE = 2;  // velocidad de subida de la burbuja
 export const EMOTE_FRAMES = 90;
+
+// --- Gancho con cuerda: lanzá la cuerda a un anillo y te deslizás hasta él ---
+export const HOOK_RANGE = 150;      // radio máximo (px) para engancharse
+export const HOOK_SPEED = 10;       // velocidad de retraído de la cuerda (px/frame)
+export const HOOK_RELEASE_POP = -7; // impulso al soltarse al llegar al anillo
 
 export interface BrosGameState {
   players: BrosPlayer[];
@@ -85,6 +95,9 @@ export interface BrosGameState {
   enemies: Enemy[];
   eTick: number; // paso de animación de los enemigos (determinista, compartido)
   worldW: number; // ancho del mundo en píxeles (varias pantallas: hay scroll)
+  // Último lanzamiento de la pareja (viaja por la DB como respaldo del
+  // broadcast): quien reciba target === su id aplica el impulso.
+  lastThrow?: { seq: number; target: PlayerId; vx: number; vy: number } | null;
 }
 
 export interface Enemy {
@@ -105,9 +118,55 @@ export interface Enemy {
   phase?: number; // fase de animación del aleteo
 }
 
-const GROUND_Y = SCREEN_HEIGHT - 32;
+export const GROUND_Y = SCREEN_HEIGHT - 32;
+// --- Jaula de rescate (estilo Donkey Kong): al morir quedás enjaulado cerca
+// de tu pareja; ella te libera SALTANDO ENCIMA de la jaula. ---
+export const CAGE_Y = GROUND_Y - 120;   // altura a la que flota la jaula
+export const CAGE_AUTOFREE_FRAMES = 150; // seguro anti-encierro: se libera solo (~5s)
+export const CAGE_REWARD = 3;           // monedas de premio por rescatar
 
-const groundSegment = (from: number, to: number): BrosTile[] =>
+// --- Jaula de rescate (estilo Donkey Kong): al morir quedás ENJAULADO flotando
+// cerca de tu pareja. Ella te libera SALTANDO ENCIMA de la jaula (y gana
+// monedas). Si nadie rescata, a los ~5s te suelta sola para no trabar el juego.
+export function putInCage(p: BrosPlayer, near: BrosPlayer): BrosPlayer {
+  const x = Math.max(60, near.vx >= 0 ? near.x + 110 : near.x - 110 - p.width);
+  return {
+    ...p, caged: true, cageT: 0, x, y: CAGE_Y,
+    vx: 0, vy: 0, onGround: false, carrying: null, carriedBy: null, hooking: null,
+    emote: "😱", emoteT: EMOTE_FRAMES,
+  };
+}
+export const tickCage = (p: BrosPlayer): BrosPlayer =>
+  p.caged ? { ...p, cageT: (p.cageT ?? 0) + 1 } : p;
+
+// Suelta automática de seguridad (si la pareja no llega o también está enjaulada).
+export function cageExpired(p: BrosPlayer): BrosPlayer {
+  if (p.caged && (p.cageT ?? 0) >= CAGE_AUTOFREE_FRAMES)
+    return { ...p, caged: false, cageT: 0, y: GROUND_Y - p.height, vy: 0, onGround: true };
+  return p;
+}
+
+// Rescate: el rescatador CAE SOBRE la parte superior de la jaula para romperla.
+export function tryCageRescue(
+  rescuer: BrosPlayer,
+  caged: BrosPlayer,
+): { rescuer: BrosPlayer; caged: BrosPlayer; rescued: boolean } {
+  if (!caged.caged) return { rescuer, caged, rescued: false };
+  const top = caged.y;
+  const feet = rescuer.y + rescuer.height;
+  const prevFeet = feet - rescuer.vy;
+  const overX = rescuer.x + rescuer.width > caged.x - 8 && rescuer.x < caged.x + caged.width + 8;
+  if (rescuer.vy >= 0 && prevFeet <= top + 8 && feet >= top && overX) {
+    return {
+      rescuer: { ...rescuer, vy: -8, y: top - rescuer.height, onGround: false, coins: rescuer.coins + CAGE_REWARD },
+      caged: { ...caged, caged: false, cageT: 0, y: GROUND_Y - caged.height, vx: 0, vy: 0, onGround: true, emote: "💜", emoteT: EMOTE_FRAMES },
+      rescued: true,
+    };
+  }
+  return { rescuer, caged, rescued: false };
+}
+
+export const groundSegment = (from: number, to: number): BrosTile[] =>
   Array.from({ length: Math.round((to - from) / 32) }, (_, i) => ({
     type: "ground" as const,
     x: from + i * 32,
@@ -116,8 +175,8 @@ const groundSegment = (from: number, to: number): BrosTile[] =>
     h: 32,
   }));
 
-const platform = (x: number, y: number, w: number): BrosTile => ({ type: "platform", x, y, w, h: 24 });
-const coin = (x: number, y: number): BrosTile => ({ type: "coin", x, y, w: 16, h: 16 });
+export const platform = (x: number, y: number, w: number): BrosTile => ({ type: "platform", x, y, w, h: 24 });
+export const coin = (x: number, y: number): BrosTile => ({ type: "coin", x, y, w: 16, h: 16 });
 
 // Estrellas (power-up): al recolectarlas dan un escudo. Van apoyadas en el
 // piso para que sean fáciles de agarrar caminando (sin forzar saltos difíciles).
@@ -142,13 +201,40 @@ const heartPickup = (width: number): BrosTile => ({
 
 // El mundo mide varias pantallas de ancho; el scroll horizontal recorre cada etapa.
 export function worldWidthForLevel(mode: BrosMode, level: number = 1): number {
+  if (mode === "story") return storyStage(level - 1)?.width ?? SCREEN_WIDTH * 3;
   if (mode === "temple") return SCREEN_WIDTH * 4;
   if (mode === "coop") return SCREEN_WIDTH * 3 + level * 120;
   return SCREEN_WIDTH * 3;
 }
 
-const flagAt = (x: number, h = 64): BrosTile => ({ type: "flag", x, y: 190, w: 32, h });
-const flagAtGround = (x: number): BrosTile => ({ type: "flag", x, y: GROUND_Y - 64, w: 32, h: 64 });
+export const flagAt = (x: number, h = 64): BrosTile => ({ type: "flag", x, y: 190, w: 32, h });
+export const flagAtGround = (x: number): BrosTile => ({ type: "flag", x, y: GROUND_Y - 64, w: 32, h: 64 });
+// Caja empujable: se empuja caminando hacia ella y, apoyada sobre una placa,
+// la mantiene presionada (el clásico "peso que deja el botón apretado").
+export const crate = (x: number, y: number, s = 36): BrosTile => ({ type: "crate", x, y, w: s, h: s });
+
+// ---------------------------------------------------------------------------
+// Modo historia ("story"): el mundo co-op de etapas diseñadas a mano. Las
+// etapas viven en stages.ts y se registran aquí para evitar import circular
+// (stages.ts importa los helpers de este módulo).
+// ---------------------------------------------------------------------------
+export interface StoryStage {
+  id: string;
+  name: string;
+  intro: string; // texto que guía la mecánica de la etapa
+  width: number;
+  tiles: BrosTile[];
+  enemies: Enemy[];
+}
+
+const storyRegistry: StoryStage[] = [];
+export function registerStoryStages(stages: StoryStage[]): void {
+  storyRegistry.length = 0;
+  storyRegistry.push(...stages);
+}
+export const storyStageCount = (): number => storyRegistry.length;
+export const storyStage = (i: number): StoryStage | null => storyRegistry[i] ?? null;
+export const storyStages = (): StoryStage[] => [...storyRegistry];
 
 // Carrera y monedas: una pista larga con plataformas y arcos de monedas hasta
 // la meta muy a la derecha (por eso ahora hay que recorrer todo el mundo).
@@ -254,8 +340,27 @@ export function tilesForLevel(mode: BrosMode, level: number = 1): BrosTile[] {
     mode === "lives" ? livesTiles().tiles
     : mode === "coop" ? coopTiles(level, width).tiles
     : mode === "temple" ? templeTiles(level, width).tiles
+    : mode === "story" ? (storyStage(level - 1)?.tiles ?? raceTiles().tiles)
     : raceTiles().tiles;
-  return [...base, ...powerStars(width), heartPickup(width)];
+  // Anillos de gancho: en el Templo siempre (es su mecánica estrella), en
+  // cooperación desde la etapa 2 y en Vidas para cruzar los huecos con estilo.
+  const hooks: BrosTile[] = [];
+  const hook = (fx: number, y: number): BrosTile => ({
+    type: "hook" as const,
+    x: Math.round(width * fx),
+    y,
+    w: 14,
+    h: 14,
+  });
+  if (mode === "temple") {
+    [0.22, 0.42, 0.62, 0.82].forEach((fx, i) => hooks.push(hook(fx, 220 + (i % 2) * 40)));
+  } else if (mode === "coop" && level >= 2) {
+    [0.3, 0.55, 0.78].forEach((fx, i) => hooks.push(hook(fx, 230 + (i % 2) * 40)));
+  } else if (mode === "lives") {
+    [0.2, 0.5, 0.8].forEach((fx, i) => hooks.push(hook(fx, 220 + (i % 2) * 40)));
+  }
+  if (mode === "story") return [...base]; // la etapa ya trae todo lo diseñado
+  return [...base, ...hooks, ...powerStars(width), heartPickup(width)];
 }
 
 // Reposiciona un jugador a su punto de partida (para cambiar de etapa).
@@ -273,7 +378,56 @@ export function resetPlayer(p: BrosPlayer): BrosPlayer {
     carrying: null,
     carriedBy: null,
     interactCd: 0,
+    hooking: null,
   };
+}
+
+// --- Gancho con cuerda ----------------------------------------------------
+
+// Busca el anillo más cercano dentro del rango del jugador. Devuelve el punto
+// central del anillo o null si no hay ninguno alcanzable.
+export function findHook(player: BrosPlayer, tiles: BrosTile[]): { x: number; y: number } | null {
+  const cx = player.x + player.width / 2;
+  const cy = player.y + player.height / 2;
+  let best: { x: number; y: number } | null = null;
+  let bestD = HOOK_RANGE;
+  for (const t of tiles) {
+    if (t.type !== "hook") continue;
+    const hx = t.x + t.w / 2;
+    const hy = t.y + t.h / 2;
+    const d = Math.hypot(hx - cx, hy - cy);
+    if (d <= HOOK_RANGE && d < bestD) {
+      bestD = d;
+      best = { x: hx, y: hy };
+    }
+  }
+  return best;
+}
+
+// Lanza la cuerda al anillo más cercano. Devuelve null si no hay anillo
+// alcanzable o el jugador no puede usarlo (burbuja, cargado por la pareja).
+export function startHook(player: BrosPlayer, tiles: BrosTile[]): BrosPlayer | null {
+  if (player.isBubble || player.carriedBy || player.carrying) return null;
+  const target = findHook(player, tiles);
+  if (!target) return null;
+  return { ...player, hooking: target, jumped: false, onGround: false, vx: player.vx * 0.3 };
+}
+
+// Avanza un frame el deslizamiento por cuerda: acerca al jugador al anillo a
+// velocidad constante y, al llegar, lo suelta con un impulso hacia arriba.
+export function tickHook(player: BrosPlayer): BrosPlayer {
+  if (!player.hooking) return player;
+  const cx = player.x + player.width / 2;
+  const cy = player.y + player.height / 2;
+  const dx = player.hooking.x - cx;
+  const dy = player.hooking.y - cy;
+  const d = Math.hypot(dx, dy);
+  if (d < 16) {
+    // Llegó al anillo: corta la cuerda y sale disparado hacia arriba.
+    return { ...player, hooking: null, vx: player.vx * 0.6, vy: HOOK_RELEASE_POP, jumped: false, onGround: false };
+  }
+  const step = Math.min(HOOK_SPEED, d);
+  return { ...player, vx: (dx / d) * step, vy: (dy / d) * step };
 }
 
 // Enemigos que patrullan de un lado a otro. Aparecen en los modos
@@ -281,6 +435,10 @@ export function resetPlayer(p: BrosPlayer): BrosPlayer {
 // cerca de la meta (que quedó al fondo del mundo largo).
 export function enemiesForLevel(mode: BrosMode, level: number = 1, width: number = SCREEN_WIDTH): Enemy[] {
   const base: Enemy[] = [];
+  if (mode === "story") {
+    // Las etapas de la historia traen sus propios enemigos diseñados.
+    return [...(storyStage(level - 1)?.enemies ?? [])];
+  }
   if (mode === "coop") {
     base.push({ id: "e1", x: 480, y: 380, w: 28, h: 40, minX: 320, maxX: Math.min(width * 0.5, 900), dir: -1, speed: 2, boss: false });
     if (level >= 2) base.push({ id: "e2", x: Math.min(width * 0.55, 1200), y: 320, w: 28, h: 40, minX: Math.min(width * 0.5, 1000), maxX: Math.max(width * 0.7, width - 320), dir: 1, speed: 2.6, boss: false });
@@ -460,13 +618,23 @@ export function applyInput(player: BrosPlayer, input: "left" | "right" | "up" | 
     p.facing = "right";
     p.anim += 1 / ANIM_FPS;
   } else if (input === "up") {
-    // Salto desde el suelo, con coyote time o como doble salto.
-    if (p.onGround || (p.coyote ?? 0) > 0 || (p.jumped && Math.abs(p.vy) < 4)) {
+    // Si está colgado de una cuerda, saltar corta la cuerda con impulso.
+    if (p.hooking) {
+      p.hooking = null;
+      p.vy = JUMP_FORCE * 0.8;
+      p.jumped = false;
+      p.onGround = false;
+      return p;
+    }
+    // Salto solo desde el suelo o con coyote time. SIN doble salto: saltar en
+    // el aire permitía encadenar saltos al final de cada arco y "volar" por
+    // todo el mapa, rompiendo el diseño de las etapas.
+    if (p.onGround || (p.coyote ?? 0) > 0) {
       p.vy = JUMP_FORCE;
       p.onGround = false;
       p.jumped = true;
+      p.coyote = 0; // la ventana se consume al saltar
     }
-    p.coyote = 0; // la ventana se consume al saltar
   } else if (input === "jumpcut") {
     // Salto variable: soltar el botón corta el impulso ascendente a la mitad.
     if (p.vy < 0) p.vy = p.vy * 0.45;
@@ -489,7 +657,8 @@ export const aabbOverlap = (a: BrosPlayer, b: BrosPlayer): boolean =>
   a.y < b.y + b.height &&
   a.y + a.height > b.y;
 
-// ¿Hay jugadores sobre la placa de ese par? Las placas "both" exigen a los dos.
+// ¿Hay peso sobre la placa de ese par? Las placas "both" exigen dos pesos
+// (dos jugadores, o un jugador + una caja empujada encima).
 export function platePressed(tiles: BrosTile[], pair: number, players: BrosPlayer[]): boolean {
   const plate = tiles.find((t) => t.type === "plate" && t.pair === pair);
   if (!plate) return false;
@@ -499,8 +668,17 @@ export function platePressed(tiles: BrosTile[], pair: number, players: BrosPlaye
       p.y + p.height <= plate.y + plate.h + 2 &&
       p.x + p.width > plate.x &&
       p.x < plate.x + plate.w,
-  );
-  return plate.both ? pressing.length >= 2 : pressing.length >= 1;
+  ).length;
+  // Las cajas también pesan: una caja apoyada en la placa la deja presionada.
+  const crates = tiles.filter(
+    (c) =>
+      c.type === "crate" &&
+      c.y + c.h >= plate.y - 2 &&
+      c.y + c.h <= plate.y + plate.h + 6 &&
+      c.x + c.w > plate.x &&
+      c.x < plate.x + plate.w,
+  ).length;
+  return plate.both ? pressing + crates >= 2 : pressing + crates >= 1;
 }
 
 // ¿Alguien está tocando (manteniendo) la palanca de ese par?
@@ -516,10 +694,68 @@ export function leverHeld(tiles: BrosTile[], pair: number, players: BrosPlayer[]
   );
 }
 
-// Un portón cooperativo se abre mientras su placa (simple o doble) esté pisada,
-// o mientras alguien mantenga su palanca presionada.
+export const PUSH_SPEED = 3.0;
+
+// Empuje de cajas estilo Mario: si un jugador está pegado a la caja y camina
+// hacia ella, la caja se desliza en esa dirección. Un solo jugador basta.
+// La cooperación vive en DÓNDE hay que dejarla (ej: sobre una placa 2P).
+export function pushCrates(
+  players: BrosPlayer[],
+  tiles: BrosTile[],
+  dirs: Partial<Record<PlayerId, number>> = {},
+): { players: BrosPlayer[]; tiles: BrosTile[] } {
+  const nt = tiles.map((t) => ({ ...t }));
+  const np = players.map((p) => ({ ...p }));
+  for (const c of nt) {
+    if (c.type !== "crate") continue;
+    for (const p of np) {
+      const d = dirs[p.id] ?? 0;
+      if (d === 0 || !p.onGround || p.carriedBy) continue;
+      // ¿El jugador está tocando la caja por el lado correcto?
+      const touchingX = d > 0
+        ? p.x + p.width >= c.x - 2 && p.x + p.width <= c.x + 8
+        : p.x <= c.x + c.w + 2 && p.x >= c.x + c.w - 8;
+      const touchingY = p.y + p.height > c.y + 4 && p.y < c.y + c.h - 4;
+      if (!touchingX || !touchingY) continue;
+      const nx = c.x + d * PUSH_SPEED;
+      // ¿La caja choca con algo sólido?
+      const blocked = nt.some(
+        (t) =>
+          t !== c &&
+          t.type !== "coin" && t.type !== "flag" && t.type !== "plate" &&
+          t.type !== "power" && t.type !== "heart" && t.type !== "lever" && t.type !== "hook" &&
+          (t.type === "ground" || t.type === "platform" || t.type === "crate" ||
+            (t.type === "gate" && !gateOpen(tiles, t.pair ?? 0, players))) &&
+          nx < t.x + t.w && nx + c.w > t.x &&
+          c.y < t.y + t.h && c.y + c.h > t.y,
+      );
+      if (blocked) continue;
+      c.x = nx;
+      // El empujador queda pegado al borde de la caja.
+      const i = np.findIndex((q) => q.id === p.id);
+      np[i] = d > 0 ? { ...np[i], x: c.x - p.width } : { ...np[i], x: c.x + c.w };
+    }
+  }
+  for (const c of nt) {
+    if (c.type === "crate") c.x = Math.max(0, c.x);
+  }
+  return { players: np, tiles: nt };
+}
+
+
+// Una reja cooperativa se abre mientras su placa está pisada, o si ya se
+// "trabó" (latch) porque alguien la abrió antes. Así nadie queda encerrado.
 export function gateOpen(tiles: BrosTile[], pair: number, players: BrosPlayer[]): boolean {
+  const gate = tiles.find((t) => t.type === "gate" && t.pair === pair);
+  if (gate?.latched) return true;
   return platePressed(tiles, pair, players) || leverHeld(tiles, pair, players);
+}
+
+// Llámalo cuando la reja se abra por primera vez para que quede trabada.
+export function latchGate(tiles: BrosTile[], pair: number): BrosTile[] {
+  return tiles.map((t) =>
+    t.type === "gate" && t.pair === pair ? { ...t, latched: true } : t,
+  );
 }
 
 export function resolveCollisions(
@@ -533,6 +769,7 @@ export function resolveCollisions(
     (t) =>
       t.type === "ground" ||
       t.type === "platform" ||
+      t.type === "crate" || // se puede subir encima de las cajas
       (t.type === "gate" && !gateOpen(tiles, t.pair ?? 0, players)),
   );
 
@@ -734,7 +971,8 @@ export function updatePlayer(player: BrosPlayer, tiles: BrosTile[]): BrosPlayer 
 // --- Mecánicas cooperativas ---------------------------------------------
 
 // Cargar a la pareja: la sube sobre su cabeza. Falla si hay burbujas, ya está
-// cargando/a bordo, está en el aire, está de espaldas o fuera de rango.
+// cargando/a bordo, está en el aire o fuera de rango. No exige estar de
+// frente: el toque es generoso (el lanzamiento sí usa la mirada).
 export function tryGrab(
   actor: BrosPlayer,
   partner: BrosPlayer,
@@ -745,9 +983,8 @@ export function tryGrab(
   if (partner.carriedBy) return null;
   if ((actor.interactCd ?? 0) > 0) return null;
   if (!actor.onGround) return null;
-  const dx = partner.x - actor.x;
-  const inFront = actor.facing === "right" ? dx >= -6 : dx <= 6;
-  if (!inFront || Math.abs(dx) > GRAB_RANGE || Math.abs(partner.y - actor.y) > 54) return null;
+  const dx = Math.abs(partner.x - actor.x);
+  if (dx > GRAB_RANGE || Math.abs(partner.y - actor.y) > GRAB_DY) return null;
   return {
     actor: { ...actor, carrying: partner.id, interactCd: GRAB_CD },
     partner: { ...partner, carriedBy: actor.id, onGround: false },

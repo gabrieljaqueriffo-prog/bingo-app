@@ -11,10 +11,17 @@ export interface PlayerSnapshot {
   vy: number;
   state: string; // "lobby" | "playing" | ...
   isBubble: boolean;
+  caged: boolean;
   carrying: string | null;
   carriedBy: string | null;
   emote: string | null;
   t: number; // marca de tiempo del emisor
+  // Pulso de lanzamiento (enviado unas veces hasta que el rival lo confirma):
+  // quien reciba throwTarget === su id recibe el impulso de ser lanzado.
+  throwSeq?: number;
+  throwTarget?: string | null;
+  throwVx?: number;
+  throwVy?: number;
 }
 
 // Retardo fijo de render: mostramos el estado remoto "atrasado" LATENCY_MS

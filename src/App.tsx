@@ -57,9 +57,10 @@ import { parseMentLink } from "./games/mentiroso/mentRemote";
 import NavalApp from "./games/naval/NavApp";
 import { parseNavalLink } from "./games/naval/navalRemote";
 import BrosApp from "./games/bros/BrosApp";
+import BrosDevApp from "./games/bros/BrosDevApp";
 import { parseBrosLink } from "./games/bros/remote";
 
-type View = "loading" | "home" | "games" | "verify" | "play" | "pick" | "mentiroso" | "mentiroso-online" | "conecta4" | "conecta4-online" | "stop-online" | "naval" | "bros";
+type View = "loading" | "home" | "games" | "verify" | "play" | "pick" | "mentiroso" | "mentiroso-online" | "conecta4" | "conecta4-online" | "stop-online" | "naval" | "bros" | "brosdev";
 type CardView = "all" | "four" | "one";
 type PlayTheme = { marked: string; marked2: string; last: string; last2: string; modality: string; modality2: string; gradient: boolean };
 const defaultTheme: PlayTheme = { marked: "#ffc94a", marked2: "#ff9f2e", last: "#318df0", last2: "#705cff", modality: "#8b6cf6", modality2: "#ef5da8", gradient: true };
@@ -72,7 +73,7 @@ const makeCard = (
 
 export default function App() {
       const [view, setView] = useState<View>(() =>
-    parseBrosLink() ? "bros" : parseNavalLink() ? "naval" : parseMentLink() ? "mentiroso-online" : parseStopLink() ? "stop-online" : parseRoomLink() ? "conecta4-online" : "loading",
+    window.location.hash.startsWith("#brosdev") ? "brosdev" : parseBrosLink() ? "bros" : parseNavalLink() ? "naval" : parseMentLink() ? "mentiroso-online" : parseStopLink() ? "stop-online" : parseRoomLink() ? "conecta4-online" : "loading",
   ),
     [game, setGame] = useState<Game | null>(null),
     [games, setGames] = useState<Game[]>([]),
@@ -91,6 +92,16 @@ export default function App() {
       catch { return defaultTheme; }
     });
   const input = useRef<HTMLInputElement>(null);
+  // Responder a cambios de hash (ej: el botón "🧪 Probar etapas" navega a #brosdev).
+  useEffect(() => {
+    const onHash = () => {
+      const h = window.location.hash;
+      if (h.startsWith("#brosdev")) setView((v) => (v === "brosdev" ? v : "brosdev"));
+      else if (parseBrosLink()) setView((v) => (v === "bros" ? v : "bros"));
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
   useEffect(() => {
     (async () => {
       const table = new URLSearchParams(location.search).get("tabla");
@@ -567,6 +578,7 @@ export default function App() {
   if (view === "mentiroso-online") return <MentirosoRemoteApp onExit={() => setView("home")} />;
   if (view === "naval") return <NavalApp onExit={() => setView("home")} />;
   if (view === "bros") return <BrosApp onExit={() => setView("home")} />;
+  if (view === "brosdev") return <BrosDevApp onExit={() => setView("home")} />;
   if (view === "conecta4") return <Conecta4App onExit={() => setView("home")} />;
   if (view === "conecta4-online") return <Conecta4RemoteApp onExit={() => setView("home")} />;
     if (view === "stop-online") return <StopRemoteApp onExit={() => setView("home")} />;

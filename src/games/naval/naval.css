@@ -4,32 +4,32 @@
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  background: linear-gradient(180deg, #0d2b45 0%, #071527 100%);
-  color: #f5fbff;
+  background: linear-gradient(180deg, #e3f0fc 0%, #f7f2e7 100%);
+  color: #183025;
 }
 .nv-head {
   display: flex; align-items: center; justify-content: space-between; gap: .75rem;
 }
 .nv-head h1 { font-size: 1.18rem; margin: 0; letter-spacing: .04em; }
 .nv-head button {
-  background: rgba(255,255,255,.08); border: none; color: inherit;
+  background: rgba(0,0,0,.06); border: none; color: inherit;
   width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
 }
-.nv-head button:hover { background: rgba(255,255,255,.15); }
-.naval .eyebrow { color: #8fd0ff; margin: .5rem 0; }
+.nv-head button:hover { background: rgba(0,0,0,.12); }
+.naval .eyebrow { color: #2a6f9e; margin: .5rem 0; }
 
 .nv-hero {
-  text-align: center; padding: 2rem 1rem; background: rgba(255,255,255,.04);
-  border-radius: 24px; border: 1px solid rgba(255,255,255,.08);
+  text-align: center; padding: 2rem 1rem; background: rgba(255,255,255,.75);
+  border-radius: 24px; border: 1px solid var(--line, #dcd3c1);
 }
 .nv-hero h2 { margin: .25rem 0 .75rem; font-size: 1.5rem; }
-.nv-hero p { color: #d8eaf5; margin: 0 0 .5rem; }
+.nv-hero p { color: #526158; margin: 0 0 .5rem; }
 .nv-hero .primary { margin-top: .5rem; }
 
 .nv-form { display: flex; flex-direction: column; gap: .75rem; }
 .nv-form label { display: flex; flex-direction: column; gap: .35rem; }
 .nv-form input {
-  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1);
+  background: #fff; border: 1px solid var(--line, #dcd3c1);
   color: inherit; padding: .75rem 1rem; border-radius: 12px; font-size: 1rem;
 }
 .naval .primary {
@@ -38,41 +38,74 @@
   display: flex; align-items: center; justify-content: center; gap: .5rem;
 }
 .naval .primary:disabled { opacity: .4; }
-.nv-error { text-align: center; color: #ffb9a6; background: rgba(239,93,93,.12); border: 1px solid rgba(239,93,93,.35); border-radius: 12px; padding: .6rem .9rem; }
+.nv-error { text-align: center; color: #a8321e; background: rgba(239,93,93,.12); border: 1px solid rgba(239,93,93,.35); border-radius: 12px; padding: .6rem .9rem; }
 
 .nv-code {
   font: 700 42px Fraunces, serif; letter-spacing: .22em; margin: .75rem 0 .75rem .22em;
-  color: #8fd0ff;
+  color: #2a6f9e;
 }
 
 .nv-turn {
-  background: rgba(88,193,255,.12); border: 1px solid rgba(88,193,255,.3);
-  color: #f5fbff; padding: .7rem 1rem; border-radius: 12px; text-align: center;
+  background: rgba(88,193,255,.18); border: 1px solid rgba(88,193,255,.45);
+  color: #183025; padding: .7rem 1rem; border-radius: 12px; text-align: center;
+  font-weight: 600; animation: nv-pulse 2s ease-in-out infinite;
 }
-.nv-turn.me { background: rgba(98,209,155,.12); border-color: rgba(98,209,155,.4); }
+.nv-turn.me { background: rgba(98,209,155,.2); border-color: #2f9e6d; }
+@keyframes nv-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.015); }
+}
 
 .nv-grid-block h3 {
-  margin: .25rem 0 .5rem; font-size: .95rem; color: #d8eaf5; text-align: center;
+  margin: .25rem 0 .5rem; font-size: .95rem; color: #526158; text-align: center;
 }
 .nv-grid {
   display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px;
-  background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1);
+  background: rgba(255,255,255,.65); border: 1px solid var(--line, #dcd3c1);
   border-radius: 14px; padding: 6px;
 }
 .nv-cell {
   aspect-ratio: 1; border-radius: 9px; border: none;
-  background: rgba(4,12,26,.6);
+  background: #d7e3ee;
+  transition: transform .15s ease, background .25s ease;
 }
 .nv-cell.ship-intact { background: linear-gradient(145deg, #5aa0d8, #2e7cf6); }
-.nv-cell.ship-hit { background: #ef5da8; }
-.nv-cell.water-hit { background: rgba(88,193,255,.35); }
+.nv-cell.ship-hit { background: #ef5da8; animation: nv-pop .35s ease; }
+.nv-cell.water-hit { background: rgba(88,193,255,.4); animation: nv-pop .35s ease; }
 .nv-cell:disabled { opacity: 1; }
+.nv-grid.attack .nv-cell:not(:disabled) { cursor: pointer; }
+.nv-grid.attack .nv-cell:not(:disabled):hover { transform: scale(1.06); }
 .nv-grid.attack .nv-cell:not(:disabled):active { transform: scale(.92); }
+@keyframes nv-pop {
+  0% { transform: scale(.7); }
+  60% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
 
 .nv-result {
   text-align: center; margin-top: 1rem; padding: 1.5rem 1rem;
-  background: rgba(88,193,255,.1); border: 1px solid #58c1ff; border-radius: 18px;
+  background: rgba(88,193,255,.12); border: 1px solid #2e7cf6; border-radius: 18px;
   display: flex; flex-direction: column; align-items: center; gap: .5rem;
 }
 .nv-result h2 { margin: 0; font-size: 1.5rem; }
 .nv-result .primary { width: 100%; max-width: 260px; }
+
+/* Colocación de flota */
+.nv-place-actions {
+  display: flex; gap: .5rem; justify-content: center; flex-wrap: wrap;
+  margin-top: .6rem;
+}
+.nv-small {
+  display: flex; align-items: center; gap: .35rem;
+  background: #fff; border: 1px solid var(--line, #dcd3c1); color: inherit;
+  border-radius: 10px; padding: .5rem .7rem; font-size: .85rem; font-weight: 600;
+}
+.nv-small:disabled { opacity: .45; }
+
+/* Marcador de flotas */
+.nv-fleets {
+  display: flex; justify-content: space-between; gap: .5rem; flex-wrap: wrap;
+  font-size: .85rem; font-weight: 600; color: #2a6f9e;
+  background: rgba(255,255,255,.65); border: 1px solid var(--line, #dcd3c1);
+  border-radius: 10px; padding: .5rem .7rem;
+}

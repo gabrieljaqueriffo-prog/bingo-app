@@ -14,18 +14,26 @@ import {
   createInitialGameState,
   hitEnemy,
   makeLevel,
+  cageExpired,
+  putInCage,
+  pushCrates,
+  gateOpen,
+  latchGate,
   reachFlag,
   resetPlayer,
   resolveCollisions,
   stompEnemy,
+  tickCage,
+  tryCageRescue,
   updateEnemies,
   aabbOverlap,
   attachCarried,
   tryGrab,
   tryThrow,
+  startHook,
+  tickHook,
   updateBubble,
   tickEmote,
-  gateOpen,
   leverHeld,
   emote as setEmote,
   ANIM_FPS,
@@ -33,7 +41,6 @@ import {
   GRAB_CD,
   type Enemy,
   type BrosGameState,
-  type BrosMode,
   type BrosPlayer,
   type Phase,
   type PlayerId,
@@ -52,7 +59,12 @@ import {
   type BrosRoom,
 } from "./remote";
 import { SnapshotBuffer } from "./interpolate";
+import type { PlayerSnapshot } from "./interpolate";
 import { isSupabaseConfigured, supabaseKeyError } from "../../lib/supabase";
+import { storyStage, storyStageCount, storyStages } from "./engine";
+import "./stages"; // registra las etapas del mundo en el motor
+import BrosWorldMap from "./WorldMap";
+import { getWorldProgress, setWorldProgress } from "./progress";
 import "./bros.css";
 import { ChevronLeft, ChevronRight, ChevronUp, Share2 } from "lucide-react";
 
@@ -68,7 +80,8 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
   const [game, setGame] = useState<BrosGameState>(createInitialGameState());
   const [selfId, setSelfId] = useState<"red" | "blue">("red");
   const [error, setError] = useState<string>("");
-  const [mode, setMode] = useState<BrosMode>("race");
+  const [selectedStage, setSelectedStage] = useState(0);
+  const [progress, setProgress] = useState(() => getWorldProgress());
   const [joinCode, setJoinCode] = useState("");
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
@@ -85,6 +98,12 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
   const stageUntilRef = useRef<number>(0);
   const selfIdRef = useRef(selfId);
   selfIdRef.current = selfId;
+  // Pulso de lanzamiento: cuando cargo y lanzo a la pareja, envío el impulso
+  // por broadcast unos 800ms para que su dispositivo lo reciba aunque se
+  // pierda algún paquete. lastThrowSeq evita aplicar el mismo lanzamiento dos veces.
+  const throwPulseRef = useRef<{ seq: number; target: PlayerId; vx: number; vy: number; until: number } | null>(null);
+  const throwSeqSend = useRef(0);
+  const lastThrowSeq = useRef(0);
 
   const doJoin = (code: string) => {
     const clean = code.trim().toUpperCase();
@@ -116,7 +135,7 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
       return;
     }
     try {
-      const res = await createBrosRoom(mode);
+      const res = await createBrosRoom("story", selectedStage + 1);
       if (res.code === null) {
         setError(`No se pudo crear la sala: ${res.error}. Verificá que ejecutaste supabase-rooms.sql en el SQL Editor.`);
         return;
@@ -147,7 +166,8 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
     if (!r || g.phase !== "playing" || g.winner) return;
     const me = g.players.find((p) => p.id === selfIdRef.current);
     if (!me) return;
-    if (!(me.onGround || me.coyote > 0 || (me.jumped && Math.abs(me.vy) < 5))) return;
+    if (me.carriedBy) return; // te están cargando: no podés saltar
+    if (!(me.onGround || me.coyote > 0 || me.hooking)) return;
     const next: BrosGameState = {
       ...g,
       players: g.players.map((p) => (p.id === selfIdRef.current ? applyInput(p, "up") : p)),
@@ -173,7 +193,9 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
   };
 
   // Acción cooperativa: un toque CARGA a la pareja sobre la cabeza; el segundo
-  // toque la LANZA hacia la dirección de la mirada.
+  // toque la LANZA hacia la dirección de la mirada. Si no hay pareja a mano,
+  // el mismo botón usa el GANCHO: lanza la cuerda al anillo más cercano (o
+  // corta la cuerda si ya estás colgado).
   const doAction = () => {
     const g = gameRef.current;
     const r = roomRef.current;
@@ -181,19 +203,51 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
     const me = g.players.find((p) => p.id === selfIdRef.current);
     const foe = g.players.find((p) => p.id !== selfIdRef.current);
     if (!me || !foe || me.isBubble) return;
+    if (me.carriedBy) return; // te están cargando a vos
     let nextMe = me;
     let nextFoe = foe;
     if (me.carrying === foe.id) {
       const th = tryThrow(me, foe);
       if (!th) return;
       nextMe = th.actor; nextFoe = th.partner;
+      // Avisamos por broadcast que lanzamos a la pareja, con el impulso exacto.
+      throwPulseRef.current = {
+        seq: ++throwSeqSend.current,
+        target: th.partner.id,
+        vx: th.partner.vx,
+        vy: th.partner.vy,
+        until: Date.now() + 800,
+      };
     } else {
       const gr = tryGrab(me, foe);
-      if (!gr) return;
-      nextMe = gr.actor; nextFoe = gr.partner;
+      if (gr) {
+        nextMe = gr.actor; nextFoe = gr.partner;
+      } else {
+        // Sin pareja a rango → probamos el gancho.
+        const hk = me.hooking ? { ...me, hooking: null } : startHook(me, g.tiles);
+        if (!hk) {
+          // Nada a mano: feedback visual de que la acción no encontró objetivo.
+          nextMe = setEmote(me, "❓");
+          nextFoe = foe;
+        } else {
+          nextMe = hk;
+        }
+      }
     }
     const next: BrosGameState = {
       ...g,
+      ...(me.carrying === foe.id && nextMe.carrying === null && nextFoe.vx !== foe.vx
+        ? {
+            // Registramos el lanzamiento también en el estado (viaja por la DB
+            // como respaldo por si el broadcast se pierde).
+            lastThrow: {
+              seq: throwSeqSend.current,
+              target: nextFoe.id,
+              vx: nextFoe.vx,
+              vy: nextFoe.vy,
+            },
+          }
+        : {}),
       players: g.players.map((p) =>
         p.id === me.id ? nextMe : p.id === foe.id ? nextFoe : p,
       ),
@@ -228,7 +282,7 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
       const dir = dirs[e.key];
       if (dir) { keysRef.current.add(dir); e.preventDefault(); }
-      if (jumpKeys.has(e.key)) { doJump(); e.preventDefault(); }
+      if (jumpKeys.has(e.key)) { if (!e.repeat) doJump(); e.preventDefault(); }
       if (e.key === "e" || e.key === "E") { doAction(); e.preventDefault(); }
       if (e.key === "q" || e.key === "Q") { doEmote(); e.preventDefault(); }
     };
@@ -260,11 +314,21 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
         // Si cambió de etapa, respete tu jugador al punto de partida del nivel nuevo.
         const levelChanged = updated.state.level !== g.level;
         const keep = mine && !levelChanged ? mine : updated.state.players.find((p) => p.id === selfIdRef.current);
+        const other = updated.state.players.find((p) => p.id !== selfIdRef.current);
         return {
           ...updated.state,
-          players: updated.state.players.map((p) =>
-            p.id === selfIdRef.current && keep ? keep : p,
-          ),
+          players: updated.state.players.map((p) => {
+            if (p.id !== selfIdRef.current || !keep) return p;
+            // Reconciliación de carga por la ruta de la DB (respaldo del
+            // broadcast): si la pareja nos carga, obedecemos; si soltó, soltamos.
+            if (other?.carrying === p.id && !p.carriedBy && !p.isBubble) {
+              return { ...p, carriedBy: other.id, carrying: null, jumped: false };
+            }
+            if (!other?.carrying && p.carriedBy === other?.id) {
+              return { ...p, carriedBy: null, jumped: false };
+            }
+            return p;
+          }),
           // Las monedas/items que YO ya marqué como recolectados no renacen
           // aunque el estado remoto venga con la copia vieja de los tiles.
           tiles: updated.state.tiles.map((rt) => {
@@ -273,6 +337,19 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
           }),
         };
       });
+      // Respaldo del lanzamiento por la DB (por si el broadcast se perdió).
+      const lt = updated.state.lastThrow;
+      if (lt && lt.seq > lastThrowSeq.current && lt.target === selfIdRef.current) {
+        lastThrowSeq.current = lt.seq;
+        setGame((g) => ({
+          ...g,
+          players: g.players.map((p) =>
+            p.id === selfIdRef.current
+              ? { ...p, carriedBy: null, hooking: null, onGround: false, jumped: false, vx: lt.vx, vy: lt.vy }
+              : p,
+          ),
+        }));
+      }
     });
     return stop;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -284,11 +361,63 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
     if (!room) return;
     const buf = snapBufRef.current;
     buf.clear();
-    const bc = setupPlayerBroadcast(room.code, selfIdRef.current, (s) => buf.push(s));
+    // Al recibir un snapshot del rival, además de guardarlo para interpolar,
+    // reconciliamos las mecánicas que dependen de SU decisión sobre NOSOTROS:
+    // si nos carga, nos llevamos (nuestra simulación obedece); si nos lanza,
+    // recibimos el impulso exacto.
+    const onRemoteSnapshot = (s: PlayerSnapshot) => {
+      buf.push(s);
+      const meId = selfIdRef.current;
+      if (s.carrying === meId) {
+        // La pareja nos está cargando: pasamos a obedecer su posición.
+        setGame((g) => ({
+          ...g,
+          players: g.players.map((p) =>
+            p.id === meId && !p.carriedBy && !p.isBubble
+              ? { ...p, carriedBy: s.id as PlayerId, carrying: null, jumped: false }
+              : p,
+          ),
+        }));
+      } else if (s.throwSeq && s.throwSeq > lastThrowSeq.current && s.throwTarget === meId) {
+        // ¡Nos lanzó! Aplicamos el impulso (permite doble salto a mitad de vuelo).
+        lastThrowSeq.current = s.throwSeq;
+        throwPulseRef.current = null;
+        setGame((g) => ({
+          ...g,
+          players: g.players.map((p) =>
+            p.id === meId
+              ? {
+                  ...p,
+                  carriedBy: null,
+                  hooking: null,
+                  onGround: false,
+                  jumped: false,
+                  vx: s.throwVx ?? 0,
+                  vy: s.throwVy ?? 0,
+                }
+              : p,
+          ),
+        }));
+      } else if (!s.carrying) {
+        // Dejó de cargar (o soltó a otra): cortamos nuestro carriedBy con él.
+        setGame((g) => ({
+          ...g,
+          players: g.players.map((p) =>
+            p.id === meId && p.carriedBy === s.id ? { ...p, carriedBy: null, jumped: false } : p,
+          ),
+        }));
+      }
+    };
+    const bc = setupPlayerBroadcast(room.code, selfIdRef.current, onRemoteSnapshot);
     const sendTimer = window.setInterval(() => {
       const g = gameRef.current;
       const me = g.players.find((p) => p.id === selfIdRef.current);
       if (!me) return;
+      const pulse =
+        throwPulseRef.current && throwPulseRef.current.until > Date.now()
+          ? throwPulseRef.current
+          : null;
+      if (throwPulseRef.current && !pulse) throwPulseRef.current = null;
       bc.send({
         id: me.id,
         x: me.x,
@@ -297,10 +426,15 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
         vy: me.vy,
         state: g.phase,
         isBubble: !!me.isBubble,
+        caged: !!me.caged,
         carrying: me.carrying ?? null,
         carriedBy: me.carriedBy ?? null,
         emote: me.emote ?? null,
         t: Date.now(),
+        throwSeq: pulse?.seq,
+        throwTarget: pulse?.target ?? null,
+        throwVx: pulse?.vx,
+        throwVy: pulse?.vy,
       });
     }, 100);
     return () => { window.clearInterval(sendTimer); bc.stop(); };
@@ -316,7 +450,7 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
         const dir = keysRef.current.values().next().value ?? null;
         let enemies = updateEnemies(g.enemies);
         const eTick = g.eTick + 1;
-        const coop = g.mode === "coop" || g.mode === "temple";
+        const coop = g.mode === "coop" || g.mode === "temple" || g.mode === "story";
         const collectedCoins: { x: number; y: number }[] = [];
         const collectedPowers: { x: number; y: number }[] = [];
         const collectedHearts: { x: number; y: number }[] = [];
@@ -324,21 +458,51 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
           if (p.id !== selfIdRef.current) return p; // el rival llega por red
           let np: BrosPlayer = { ...p, anim: p.anim + 1 / ANIM_FPS };
           np = tickEmote(np);
-          if (np.isBubble) {
+          if (np.caged) {
+            // Jaula estilo Donkey Kong: flotas congelado hasta que tu pareja
+            // cae ENCIMA de la jaula y la rompe (o te suelta sola a los ~5s).
+            np = tickCage(np);
+            const foe = g.players.find((q) => q.id !== selfIdRef.current);
+            if (foe) {
+              const r = tryCageRescue(foe, np);
+              if (r.rescued) np = r.caged;
+            }
+            np = cageExpired(np);
+          } else if (np.isBubble) {
             // Burbuja de rescate: flota y, si la pareja toca tu caja, te liberás.
             np = updateBubble(np);
             const foe = g.players.find((q) => q.id !== selfIdRef.current);
             if (foe && aabbOverlap(np, foe)) {
               np = { ...np, isBubble: false, carriedBy: null, carrying: null, interactCd: GRAB_CD, vy: -3, onGround: false };
             }
+          } else if (np.carriedBy) {
+            // Nos están cargando: nuestra simulación obedece al portador.
+            // La posición sale del último snapshot de él (interpolado);
+            // seguimos recolectando items al vuelo pero sin física propia.
+            np = { ...np, interactCd: Math.max(0, (np.interactCd ?? 0) - 1) };
+            const carrierId = np.carriedBy ?? null;
+            const cs = carrierId ? snapBufRef.current.sample(carrierId, performance.now()) : null;
+            if (cs) {
+              np = attachCarried(np, { ...np, id: np.carriedBy as PlayerId, x: cs.x, y: cs.y, width: 30, height: 48 });
+            }
+            np = { ...np, vx: 0, vy: 0, onGround: false };
           } else {
-            np = dir ? applyInput(np, dir) : applyInput(np, "stop");
-            np = applyGravity(np);
+            np = { ...np, interactCd: Math.max(0, (np.interactCd ?? 0) - 1) };
+            if (np.hooking) {
+              // Deslizándonos por la cuerda: velocidad fija hacia el anillo.
+              np = tickHook(np);
+            } else {
+              np = dir ? applyInput(np, dir) : applyInput(np, "stop");
+              np = applyGravity(np);
+            }
             // Pasamos TODOS los jugadores: las placas dobles y palancas exigen
             // saber dónde está el compañero; en coop, caer = burbuja (opts.coop).
             np = resolveCollisions(np, g.tiles, g.players, { coop });
             const prevFeetY = np.y + np.height; // para stomp "swept" anti-tunneling
             np = { ...np, x: np.x + np.vx, y: np.y + np.vy };
+            // Si aterrizamos mientras estábamos deslizándonos por la cuerda,
+            // la soltamos (ya llegamos).
+            if (np.onGround && np.hooking) np = { ...np, hooking: null };
             // Saltar encima de un enemigo: lo destruye (o golpea al jefe), rebotá
             // y ganás monedas. Pero si lo pisaste (bounced) no te puede golpear.
             const stomp = stompEnemy(np, enemies, prevFeetY);
@@ -354,7 +518,10 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
                 // Muerte en cooperativo → burbuja de rescate, no fin de partida.
                 np = { ...np, lives: np.lives - 1, isBubble: true, carrying: null, carriedBy: null, vx: 0, vy: 0, y: BUBBLE_TOP };
               } else {
-                np = { ...resetPlayer(np), lives: np.lives - 1 };
+                // ¡Jaula estilo Donkey Kong! Aparecés enjaulado cerca de tu
+                // pareja: ella te libera saltando encima de la jaula.
+                const foe = g.players.find((q) => q.id !== selfIdRef.current);
+                np = { ...putInCage(np, foe ?? np), lives: np.lives - 1 };
               }
             }
           }
@@ -370,9 +537,40 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
           if (hrt.collected.length) collectedHearts.push(...hrt.collected);
           return hrt.player;
         });
+        // Rescate de jaula: si caigo sobre la jaula de mi pareja, reboto, gano
+        // monedas y ella se libera (su simulación ve mi snapshot y se suelta).
+        const meP = players.find((p) => p.id === selfIdRef.current);
+        const foeP = g.players.find((q) => q.id !== selfIdRef.current);
+        if (meP && foeP?.caged) {
+          const r = tryCageRescue(meP, foeP);
+          if (r.rescued) players[players.findIndex((p) => p.id === meP.id)] = r.rescuer;
+        }
+        // Empuje de cajas: caminar contra una caja la mueve (y puede dejarla
+        // sobre una placa para dejarla presionada).
+        const dirs: Partial<Record<PlayerId, number>> = {};
+        for (const p of players) {
+          if (p.id === selfIdRef.current) {
+            dirs[p.id] = keysRef.current.has("left") ? -1 : keysRef.current.has("right") ? 1 : 0;
+          } else {
+            // El rival: usamos su vx sincronizada; si está quieto, hacia dónde mira.
+            dirs[p.id] = p.vx !== 0 ? Math.sign(p.vx) : p.facing === "left" ? -1 : p.facing === "right" ? 1 : 0;
+          }
+        }
+        const pushed = pushCrates(players, g.tiles, dirs);
+        // Latch de rejas: si una reja se abrió (alguien pisó la placa), queda
+        // trabada para siempre. Así nadie queda encerrado del otro lado.
+        const opened = new Set<number>();
+        for (const t of pushed.tiles) {
+          if (t.type === "gate" && !t.latched && gateOpen(pushed.tiles, t.pair ?? 0, pushed.players)) {
+            opened.add(t.pair ?? 0);
+          }
+        }
+        const tilesWithLatch = opened.size > 0
+          ? [...pushed.tiles].map((t) => opened.has(t.pair ?? -1) ? { ...t, latched: true } : t)
+          : pushed.tiles;
         // Marca como recolectadas las monedas/estrellas tocadas este frame para
         // que no vuelvan a aparecer ni se cuenten de nuevo.
-        let tiles = g.tiles;
+        let tiles = tilesWithLatch;
         const markCollected = (type: string, list: { x: number; y: number }[]) => {
           if (!list.length) return;
           const keys = new Set(list.map((c) => `${c.x},${c.y}`));
@@ -388,10 +586,11 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
         let winner: PlayerId | null = g.winner;
         let phase: Phase = g.phase;
         if (me) {
-          const coopClear = g.mode === "coop" && foe && reachFlag(me, g.tiles) && reachFlag(foe, g.tiles);
+          const coopClear = (g.mode === "coop" || g.mode === "story") && foe && reachFlag(me, g.tiles) && reachFlag(foe, g.tiles);
           const templeClear = g.mode === "temple" && reachFlag(me, g.tiles);
           if (coopClear || templeClear) {
-            if (g.level < MAX_LEVELS) {
+            const maxLevel = g.mode === "story" ? storyStageCount() : MAX_LEVELS;
+            if (g.level < maxLevel) {
               // Etapa superada → avanzar de nivel: mapa nuevo, enemigos nuevos, salimos los dos.
               return makeLevel(g.mode, g.level + 1, players);
             }
@@ -405,7 +604,7 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
             if (foe.lives <= 0) { winner = me.id; phase = "finished"; }
           }
         }
-        return { ...g, tiles, players, winner, phase, enemies, eTick };
+        return { ...g, tiles, players: pushed.players, winner, phase, enemies, eTick };
       });
     }, 1000 / 30);
     const commit = setInterval(() => {
@@ -426,15 +625,28 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
     if (game.winner) winSound.play();
   }, [game.winner]);
 
-  // Al avanzar de etapa mostramos un banner transitorio ("ETAPA N").
+  // Al avanzar de etapa mostramos un banner transitorio ("ETAPA N") y
+  // guardamos el progreso del mundo (desbloqueamos la siguiente etapa).
   const prevLevel = useRef(0);
   useEffect(() => {
     if (game.level > 1 && game.level > prevLevel.current) {
       stageLevelRef.current = game.level;
       stageUntilRef.current = Date.now() + 2200;
     }
+    if (game.mode === "story" && game.level > getWorldProgress()) {
+      setWorldProgress(game.level);
+      setProgress(getWorldProgress());
+    }
     prevLevel.current = game.level;
   }, [game.level]);
+
+  // Al terminar la última etapa del mundo guardamos el progreso final.
+  useEffect(() => {
+    if (game.mode === "story" && game.phase === "finished" && game.level >= getWorldProgress()) {
+      setWorldProgress(game.level + 1);
+      setProgress(getWorldProgress());
+    }
+  }, [game.phase, game.level, game.mode]);
 
 
   // Render loop con canvas (lee gameRef para dibujar a 60fps sin re-crear el efecto)
@@ -528,6 +740,38 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
           ctx.fill();
           return;
         }
+        if (t.type === "crate") {
+          // Caja empujable: tablones y cruz de refuerzo.
+          ctx.fillStyle = "#b5793a"; ctx.fillRect(t.x, t.y, t.w, t.h);
+          ctx.fillStyle = "#8f5a26";
+          ctx.fillRect(t.x, t.y, t.w, 4); ctx.fillRect(t.x, t.y + t.h - 4, t.w, 4);
+          ctx.fillRect(t.x, t.y, 4, t.h); ctx.fillRect(t.x + t.w - 4, t.y, 4, t.h);
+          ctx.strokeStyle = "#8f5a26"; ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(t.x + 4, t.y + 4); ctx.lineTo(t.x + t.w - 4, t.y + t.h - 4);
+          ctx.moveTo(t.x + t.w - 4, t.y + 4); ctx.lineTo(t.x + 4, t.y + t.h - 4);
+          ctx.stroke();
+          return;
+        }
+        if (t.type === "hook") {
+          // Anillo de gancho: acercate y tocá CARGA para lanzar la cuerda.
+          ctx.strokeStyle = "#cbd5e1";
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(t.x + t.w / 2, t.y + t.h / 2, 7, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.fillStyle = "#64748b";
+          ctx.beginPath();
+          ctx.arc(t.x + t.w / 2, t.y + t.h / 2, 2.5, 0, Math.PI * 2);
+          ctx.fill();
+          // Destello suave para que se note que es interactuable.
+          ctx.strokeStyle = `rgba(255,255,255,${0.25 + Math.sin(g.eTick * 0.08) * 0.2})`;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(t.x + t.w / 2, t.y + t.h / 2, 11, 0, Math.PI * 2);
+          ctx.stroke();
+          return;
+        }
         ctx.fillStyle =
           t.type === "ground" || t.type === "platform" ? "#8B4513"
           : t.type === "coin" ? "#ffd700"
@@ -577,6 +821,7 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
           vx: s.vx,
           vy: s.vy,
           isBubble: s.isBubble,
+          caged: s.caged,
           carrying: s.carrying as PlayerId | null,
           carriedBy: s.carriedBy as PlayerId | null,
           emote: s.emote,
@@ -586,9 +831,38 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
         const carrier = basePlayers.find((q) => q.id === p.carriedBy);
         return carrier ? attachCarried(p, carrier) : p;
       });
+      // Cuerdas: línea del jugador al anillo mientras esté enganchado.
+      renderPlayers.forEach((p) => {
+        if (!p.hooking) return;
+        ctx.strokeStyle = "#d9b98a";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(p.x + p.width / 2, p.y + p.height * 0.3);
+        ctx.lineTo(p.hooking.x, p.hooking.y);
+        ctx.stroke();
+        ctx.fillStyle = "#d9b98a";
+        ctx.beginPath();
+        ctx.arc(p.hooking.x, p.hooking.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+      });
       renderPlayers.forEach(drawSprite);
       // Burbuja de rescate y emotes encima de cada jugador.
       renderPlayers.forEach((p) => {
+        if (p.caged) {
+          // Jaula: barras verticales + techo, con parpadeo pidiendo rescate.
+          const wob = Math.sin(g.eTick * 0.15) * 2;
+          ctx.strokeStyle = "rgba(255,210,80,.95)";
+          ctx.lineWidth = 3;
+          ctx.strokeRect(p.x - 6 + wob * 0.2, p.y - 10, p.width + 12, p.height + 16);
+          for (let bx = p.x + p.width / 4; bx < p.x + p.width; bx += p.width / 4) {
+            ctx.beginPath(); ctx.moveTo(bx, p.y - 10); ctx.lineTo(bx, p.y + p.height + 6); ctx.stroke();
+          }
+          ctx.fillStyle = "rgba(255,210,80,.25)";
+          ctx.fillRect(p.x - 6 + wob * 0.2, p.y - 10, p.width + 12, 5);
+          ctx.fillStyle = "#ffd24f";
+          ctx.font = "10px monospace"; ctx.textAlign = "center";
+          ctx.fillText("¡RESCATE!", p.x + p.width / 2, p.y - 16);
+        }
         if (p.isBubble) {
           ctx.strokeStyle = "rgba(150,220,255,.9)";
           ctx.lineWidth = 2;
@@ -682,7 +956,10 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
         ctx.fillText(`ETAPA ${stageLevelRef.current}`, SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 2);
         ctx.fillStyle = `rgba(255,255,255,${0.9 * fade})`;
         ctx.font = "12px monospace";
-        ctx.fillText("¡Adelante, bros!", SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 28);
+        ctx.fillText(
+          g.mode === "story" ? (storyStage(stageLevelRef.current - 1)?.name ?? "") : "¡Adelante, bros!",
+          SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 28,
+        );
         ctx.restore();
       }
 
@@ -704,11 +981,12 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
         ctx.textAlign = "right";
         ctx.fillText("♥".repeat(Math.max(0, meNow.lives)) || "—", SCREEN_WIDTH - 10, 22);
       }
-      if (g.mode === "coop" || g.mode === "temple") {
+      if (g.mode === "coop" || g.mode === "temple" || g.mode === "story") {
+        const total = g.mode === "story" ? storyStageCount() : MAX_LEVELS;
         ctx.fillStyle = "rgba(255,255,255,.75)";
         ctx.font = "12px monospace";
         ctx.textAlign = "center";
-        ctx.fillText(`ETAPA ${g.level}/${MAX_LEVELS}`, SCREEN_WIDTH / 2, 22);
+        ctx.fillText(`ETAPA ${g.level}/${total}`, SCREEN_WIDTH / 2, 22);
       }
       if (g.winner) {
         ctx.fillStyle = "rgba(0,0,0,0.7)";
@@ -767,31 +1045,35 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
   );
 
   if (!room) {
+    console.log("🎮 Super Bros v2.0609d — lobby cargado");
     return (
-      <div className="bros-lobby">
-        <h2>Super Bros</h2>
-        <p>¡Aventura de plataformas en pareja, con etapas, enemigos y un jefe final!</p>
-        <div className="bros-modes">
-          {([
-            ["race", "🏁 Carrera", "Llegá primero a la meta"],
-            ["coins", "🪙 Monedas", "Primero en juntar 8 gana"],
-            ["lives", "❤️ Vidas", "Con huecos: último en pie gana"],
-            ["coop", "🤝 Cooperación", "3 etapas: placas, uno abre para el otro"],
-            ["temple", "🏛️ El Templo", "Cueva con historia · 3 cámaras"],
-          ] as [BrosMode, string, string][]).map(([id, name, desc]) => (
-            <button
-              key={id}
-              type="button"
-              className={`bros-mode ${mode === id ? "sel" : ""}`}
-              onClick={() => setMode(id)}
-            >
-              <b>{name}</b>
-              <small>{desc}</small>
-            </button>
-          ))}
+      <div className="bros-lobby" style={{ background: "linear-gradient(135deg, #ff006e, #8338ec, #3a86ff)", minHeight: "100vh" }}>
+        <div style={{ background: "#ffbe0b", color: "#000", padding: "14px 24px", fontSize: "20px", fontWeight: "bold", textAlign: "center", borderBottom: "4px solid #ff006e", letterSpacing: "1px" }}>
+          🎮 VERSIÓN NUEVA v2.0609d — CON CAJA Y JULIA 🎮
         </div>
-        <p className="bros-note">El modo lo elige quien crea la sala</p>
-        <button onClick={createRoom} className="bros-btn primary">Crear sala</button>
+        <h2 style={{ color: "#fff", textShadow: "2px 2px 0 #000" }}>Super Bros</h2>
+        <p>¡El mundo co-op de plataformas! Etapas diseñadas a mano donde se
+        necesitan el uno al otro para avanzar.</p>
+        <div className="world-map-wrap">
+          <BrosWorldMap
+            stages={storyStages()}
+            progress={progress}
+            selected={selectedStage}
+            onSelect={(i) => setSelectedStage(Math.min(i, progress - 1))}
+          />
+        </div>
+        <p className="bros-note">
+          {selectedStage > 0
+            ? `Arrancan desde la etapa ${selectedStage + 1} de ${storyStageCount()}`
+            : `Arrancan desde el comienzo (${storyStageCount()} etapas en el mundo)`}
+        </p>
+        <button onClick={createRoom} className="bros-btn primary">Crear sala 🎮</button>
+        <button
+          className="bros-btn secondary"
+          onClick={() => { window.location.hash = "#brosdev"; }}
+        >
+          🧪 Probar etapas (playground)
+        </button>
         <div style={{ display: "flex", flexDirection: "column", gap: ".5rem", width: "100%", maxWidth: 280 }}>
           <label style={{ display: "flex", flexDirection: "column", gap: ".3rem" }}>
             <span className="bros-note">Código de la sala</span>
@@ -895,7 +1177,7 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
               <button
                 type="button"
                 className="bros-pad action"
-                aria-label="Acción: cargar o lanzar a la pareja"
+                aria-label="Acción: cargar, lanzar a la pareja o usar el gancho"
                 onPointerDown={doAction}
               >
                 <span className="bros-pad-label">CARGA</span>

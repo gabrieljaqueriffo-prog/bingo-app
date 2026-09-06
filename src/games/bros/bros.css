@@ -135,6 +135,12 @@
   -webkit-tap-highlight-color: transparent;
 }
 .bros-pad:active { background: rgba(255, 255, 255, 0.28); }
+/* Playground: segundo set de controles (azul), más arriba y semitransparente */
+.bros-controls-blue {
+  bottom: 8.2rem;
+  opacity: 0.85;
+  z-index: 19;
+}
 .bros-pad.jump {
   width: 78px;
   height: 78px;
@@ -242,4 +248,88 @@
   font-weight: 700;
   letter-spacing: 0.2em;
   color: #58c1ff;
+/* --- Playground de etapas (dev) --- */
+.bros-devhelp {
+  position: absolute;
+  bottom: .5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 96%;
+  box-sizing: border-box;
+  text-align: center;
+  font-size: .6rem;
+  line-height: 1.5;
+  color: #a9c5db;
+  background: rgba(5, 20, 36, .72);
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 8px;
+  padding: .4rem .5rem;
+  pointer-events: none;
+  z-index: 5;
+  white-space: pre-wrap;
 }
+.bros-devhelp b { color: #ffd700; }
+.bros-intro {
+  position: absolute;
+  top: .6rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: auto;
+  max-width: 92%;
+  box-sizing: border-box;
+  text-align: center;
+  font-size: .62rem;
+  line-height: 1.45;
+  color: #ffd700;
+  background: rgba(5, 20, 36, .78);
+  border: 1px solid rgba(255, 210, 80, .4);
+  border-radius: 8px;
+  padding: .45rem .7rem;
+  pointer-events: none;
+  z-index: 6;
+}
+}
+/* --- Mapa de mundo (estilo Mario) --- */
+.world-map-wrap {
+  width: 100%;
+  max-width: 460px;
+  overflow-x: auto;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #123a6b 0%, #0a2240 55%, #3c6e2f 55.5%, #2a5221 100%);
+  border: 1px solid rgba(255, 255, 255, .15);
+  padding: .35rem .2rem .5rem;
+  margin: .25rem 0;
+}
+.world-map { min-height: 236px; margin: 0 auto; }
+.world-map-path { position: relative; height: 236px; margin: 0 auto; }
+.world-map-ground {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 26px;
+  background: repeating-linear-gradient(90deg, #2a5221 0 32px, #21411a 32px 40px);
+  border-radius: 0 0 10px 10px;
+}
+.world-node {
+  position: absolute; transform: translateX(-50%); border: none; background: transparent;
+  display: flex; flex-direction: column; align-items: center; gap: .3rem; padding: 0; cursor: pointer;
+  transition: transform .12s ease;
+}
+.world-node:disabled { cursor: not-allowed; }
+.world-node:not(:disabled):active { transform: translateX(-50%) scale(.94); }
+.world-node-orb {
+  width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center;
+  font-family: inherit; font-size: 1rem; color: #fff; border: 3px solid rgba(255,255,255,.35);
+  box-shadow: 0 3px 0 rgba(0,0,0,.35); position: relative; z-index: 2;
+}
+.world-node-name {
+  font-size: .52rem; color: #eaffdf; text-align: center; max-width: 84px; line-height: 1.3;
+  text-shadow: 0 1px 2px rgba(0,0,0,.8); font-family: inherit; position: relative; z-index: 2;
+}
+.world-node.open .world-node-orb { background: linear-gradient(180deg,#ffb347,#ff8c1a); border-color:#ffe08a; }
+.world-node.done .world-node-orb { background: linear-gradient(180deg,#48d06b,#1f9d4e); border-color:#b6ffc9; }
+.world-node.done .world-node-name { color:#d6ffde; }
+.world-node.locked .world-node-orb { background: linear-gradient(180deg,#5b6772,#3c4650); color:#9aa7b1; border-color: rgba(255,255,255,.15); }
+.world-node.locked .world-node-name { color:#9aa7b1; }
+.world-node.sel .world-node-orb { box-shadow: 0 0 0 3px #fff, 0 3px 0 rgba(0,0,0,.35); animation: world-pulse 1.1s infinite ease-in-out; }
+@keyframes world-pulse { 0%,100%{transform:scale(1);} 50%{transform:scale(1.12);} }
+.world-map-road { position:absolute; width:170px; height:14px; background:#d9a44c; border-radius:8px; z-index:1; }
+.world-map-note { font-size:.58rem; color:#cfe4d8; text-align:center; margin:.4rem 0 0; line-height:1.5; padding:0 .4rem; }
+.world-map-note b { color:#fff; }

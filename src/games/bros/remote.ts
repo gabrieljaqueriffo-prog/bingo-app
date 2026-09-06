@@ -6,6 +6,7 @@ import {
   applyGravity,
   collectCoins,
   createInitialGameState,
+  makeLevel,
   reachFlag,
   resolveCollisions,
   type BrosGameState,
@@ -97,14 +98,24 @@ export const mergeBrosStates = (
   }),
   winner: local.winner ?? remote.winner,
   phase: local.phase === "finished" || remote.phase === "finished" ? "finished" : remote.phase,
+  // El lanzamiento más nuevo gana (cada lado puede haberlo generado o recibido).
+  lastThrow:
+    local.lastThrow && (!remote.lastThrow || local.lastThrow.seq > remote.lastThrow.seq)
+      ? local.lastThrow
+      : (remote.lastThrow ?? null),
 });
 
 export const createBrosRoom = async (
   mode: BrosMode,
+  level: number = 1,
 ): Promise<{ code: string } | { code: null; error: string }> => {
   const supabase = getSupabase();
   const code = makeBrosCode();
-  const row = { code, kind: "bros", rev: 1, payload: { state: createInitialGameState(mode) } };
+  const state =
+    level > 1
+      ? makeLevel(mode, level, createInitialGameState(mode).players)
+      : createInitialGameState(mode);
+  const row = { code, kind: "bros", rev: 1, payload: { state } };
   const { error } = await supabase.from("rooms").insert(row);
   if (error) return { code: null, error: `${error.message} (código ${error.code ?? "?"})` };
   return { code };

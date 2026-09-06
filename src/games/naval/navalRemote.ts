@@ -2,9 +2,6 @@
 // Cada jugador conoce su propia grilla y el estado sincronizado completo.
 import { getSupabase } from "../../lib/supabase";
 import {
-  defaultPlacements0,
-  defaultPlacements1,
-  placeAll,
   startGame,
   type GameState,
 } from "./engine";
@@ -87,11 +84,12 @@ export const updateNavalRoom = async (
 };
 
 export const createNavalRoom = async (
-  guestName: string,
+  hostName: string,
 ): Promise<{ code: string; role: NavalRole } | null> => {
   const supabase = getSupabase();
   const code = makeNavalCode();
-  const row = { code, kind: "naval", rev: 1, payload: { state: startGame() } };
+  const state = { ...startGame(), names: [hostName || null, null] } as GameState;
+  const row = { code, kind: "naval", rev: 1, payload: { state } };
   const { error } = await supabase.from("rooms").insert(row);
   if (error) { console.error("createNavalRoom:", error.message); return null; }
   remember(code, "host");
@@ -100,19 +98,18 @@ export const createNavalRoom = async (
 
 export const joinNavalRoom = async (
   code: string,
+  guestName: string,
 ): Promise<NavalRow | "missing"> => {
   const existing = await fetchNavalRoom(code);
   if (!existing) return "missing";
-  // Marcar que la partida comenzó (bandera para que el anfitrión sepa).
+  // Marcamos que llegó el invitado y guardamos su nombre. Los barcos NO se
+  // colocan acá: cada jugador coloca su flota (fase "place") — nada de
+  // posiciones predeterminadas que se repitan en todas las partidas.
   if (!existing.state.started) {
     const updated = await updateNavalRoom(code, existing.rev, {
       ...existing.state,
       started: true,
-      boards: [
-        placeAll(existing.state, 0, defaultPlacements0),
-        placeAll(existing.state, 1, defaultPlacements1),
-      ],
-      phase: "battle",
+      names: [existing.state.names?.[0] ?? null, guestName || null],
     });
     if (updated) {
       existing.state = updated.state;

@@ -74,6 +74,6 @@ describe("victoria", () => {
   });
   it("la config de barcos es consistente", () => {
     const total = SHIPS.reduce((a, s) => a + s.size * s.count, 0);
-    expect(total).toBe(3 + 2 + 1 + 1); // 7 celdas
+    expect(total).toBe(3 + 2 + 2 + 1 + 1); // 9 celdas
   });
 });
