@@ -35,6 +35,7 @@ import {
     updateBubble,
   tryRescueBubble,
   tickEmote,
+  tickSpeech,
   leverHeld,
   emote as setEmote,
   ANIM_FPS,
@@ -459,6 +460,7 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
           if (p.id !== selfIdRef.current) return p; // el rival llega por red
           let np: BrosPlayer = { ...p, anim: p.anim + 1 / ANIM_FPS };
           np = tickEmote(np);
+          np = tickSpeech(np);
           if (np.caged) {
             // Jaula estilo Donkey Kong: flotas congelado hasta que tu pareja
             // cae ENCIMA de la jaula y la rompe (o te suelta sola a los ~5s).
@@ -880,6 +882,12 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
           ctx.fillStyle = "rgba(0,0,0,.4)";
           ctx.fillText(p.emote, p.x + p.width / 2 + 1, p.y - 16);
           ctx.fillText(p.emote, p.x + p.width / 2, p.y - 17);
+        }
+        if (p.say) {
+          ctx.font = "bold 8px system-ui,sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillStyle = "#ffcc00";
+          ctx.fillText(p.say.text, p.x + p.width / 2, p.y - (8+8));
         }
       });
       g.enemies.forEach((e: Enemy) => {

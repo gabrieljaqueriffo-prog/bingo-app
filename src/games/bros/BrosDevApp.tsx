@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   applyInput, applyGravity, attachCarried, aabbOverlap, collectCoins, collectHeart,
   collectPower, createInitialGameState, emote as setEmote, gateOpen, hitEnemy, latchGate, makeLevel,
-  pushCrates, reachFlag, resetPlayer, resolveCollisions, startHook, stompEnemy, tickEmote, tickHook,
+  pushCrates, reachFlag, resetPlayer, resolveCollisions, startHook, stompEnemy, tickEmote, tickHook, tickSpeech,
   cageExpired, putInCage, tickCage, tryCageRescue,
   tradeCoinsForLife, tryGrab, tryRescueBubble, tryThrow, updateBubble, updateEnemies,
   SCREEN_WIDTH, SCREEN_HEIGHT, storyStage, storyStageCount, storyStages,
@@ -112,6 +112,7 @@ const step = (g: BrosGameState): BrosGameState => {
     let players = g.players.map((p) => {
       let np: BrosPlayer = { ...p, anim: p.anim + 1 / 8 };
       np = tickEmote(np);
+      np = tickSpeech(np);
       if (np.caged) {
         // Jaula DK: congelado hasta que la pareja cae encima (o auto-liberación).
         np = tickCage(np);
@@ -217,6 +218,18 @@ const canvas = canvasRef.current; if (!canvas) return;
           ctx.fillText("¡RESCATE!", p.x + p.width / 2, p.y - 16);
         }
         if (p.isBubble) { ctx.strokeStyle = "rgba(150,220,255,.9)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(p.x + p.width / 2, p.y + p.height / 2, p.height * 0.8, 0, Math.PI * 2); ctx.stroke(); }
+        if (p.say) {
+          ctx.font = "bold 12px system-ui,sans-serif";
+          ctx.textAlign = "center";
+          const sayW = (p.say.text.length * 6.6) + 8;
+          const sy = p.y - 30;
+          ctx.fillStyle = "rgba(0,0,0,.55)";
+          ctx.fillRect(p.x + p.width / 2 - sayW / 2 - 4, sy -  (8+8), sayW + 8, 18);
+          ctx.fillStyle = "#fff";
+          ctx.fillText(p.say.text, p.x + p.width / 2 + 1, sy +  (0+1));
+          ctx.fillStyle = "#ffe14a";
+          ctx.fillText(p.say.text, p.x + p.width / 2, sy);
+        }
         if (p.emote) { ctx.font = "14px monospace"; ctx.textAlign = "center"; ctx.fillText(p.emote, p.x + p.width / 2, p.y - 16); }
       });
       ctx.restore();

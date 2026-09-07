@@ -40,6 +40,8 @@ export interface BrosPlayer {
   interactCd?: number; // frames de enfriamiento para cargar/lanzar
   emote?: string | null; // emote rápido mostrado encima del jugador
   emoteT?: number; // frames restantes del emote
+  // Globos de diálogo (humor de personaje): texto corto que flota encima.
+  say?: { text: string; t: number } | null;
   hooking?: { x: number; y: number } | null; // gancho activo: punto anclado de la cuerda
 }
 
@@ -877,30 +879,31 @@ export function resolveCollisions(
 
         if (p.y > SCREEN_HEIGHT) {
     if (opts?.coop) {
-      // Cooperativo: caer al vacío no es muerte inmediata. El jugador queda en
-      // burbuja (isBubble) que flota cerca de su pareja hasta que ésta lo
-      // libere (tocando su AABB) o pasen BUBBLE_TIMEOUT segundos (auto-rescate).
-      const partner = players.find((q) => q.id !== p.id && !q.isBubble && !q.caged);
+      // Cooperativo, estilo Mario clásico (tenso pero justo): pierde una vida y
+      // reaparece AL LADO de su pareja, con un pequeño pop de "mareo". Así el
+      // caído ve al otro y la tensión une. Si el compañero está caged/burbuja,
+      // reaparece en un punto seguro del nivel.
       p.lives -= 1;
-      p.isBubble = true;
-      p.bubbleT = 0;
       p.carrying = null;
       p.carriedBy = null;
       p.vx = 0;
-      p.vy = 0;
+      p.vy = -9; // pequeño impulso arriba para que se "deje caer" de nuevo
       p.onGround = false;
-      p.jumped = true;
-      // La burbuja aparece cerca de la pareja (para que el rescate no dependa
-      // de posición exacta) y bobea hacia él lentamente.
+      p.jumped = true; // evita doble salto mientras se asienta
+      const partner = players.find((q) => q.id !== p.id && !q.caged && !q.isBubble);
       if (partner) {
-        p.x = partner.x + partner.width / 2 - p.width / 2;
-        p.y = partner.y - 40 + Math.sin(p.anim * 0.3) * 3;
+        // Reaparece al lado del compañero (tenso: ¡a ver si lo haces sobreviviendo bien!)
+        p.x = partner.facing === "right"
+          ? partner.x + partner.width + 6
+          : partner.x - p.width - 6;
+        p.y = partner.y - 8;
+        p.facing = partner.facing;
       } else {
-        p.x = Math.max(p.x, 80);
-        p.y = BUBBLE_TOP;
+        p.x = p.id === "red" ? 100 : 160;
+        p.y = 300;
       }
-      p.emote = "🆘";
-      p.emoteT = EMOTE_FRAMES * 3; // mensaje de auxilio flotante
+      p.emote = "😵💫";
+      p.emoteT = EMOTE_FRAMES; // "mareo" al reaparecer: comedia + feedback
     } else {
       p.lives -= 1;
       p.x = p.id === "red" ? 100 : 160;
@@ -1043,7 +1046,10 @@ export function tryGrab(
   const dx = Math.abs(partner.x - actor.x);
   if (dx > GRAB_RANGE || Math.abs(partner.y - actor.y) > GRAB_DY) return null;
   return {
-    actor: { ...actor, carrying: partner.id, interactCd: GRAB_CD },
+    actor: {
+      ...actor, carrying: partner.id, interactCd: GRAB_CD,
+      say: { text: randomLine(["¡Te llevo!", "¡A bordo!", "¡No me sueltes!"]), t: 90 },
+    },
     partner: { ...partner, carriedBy: actor.id, onGround: false },
   };
 }
@@ -1066,8 +1072,14 @@ export function tryThrow(
       vx: dir * THROW_SPEED,
       vy: THROW_UP,
       interactCd: GRAB_CD,
+      say: { text: randomLine(["¡UYYYY!", "¡ALLÁ VOY!", "¡NO ME TIRES!!"]), t: 80 },
     },
   };
+}
+
+// Frase cómica aleatoria para los globos de diálogo (humor de personaje).
+function randomLine(lines: string[]): string {
+  return lines[Math.floor(Math.random() * lines.length)];
 }
 
 // Mientras un jugador lleva a otro, garantiza que quede sentado sobre su cabeza.
@@ -1147,4 +1159,17 @@ export function tickEmote(p: BrosPlayer): BrosPlayer {
   const t = (p.emoteT ?? 0) - 1;
   if (t <= 0) return { ...p, emote: null, emoteT: 0 };
   return { ...p, emoteT: t };
+}
+
+// Globos de diálogo (humor de personaje): muestra una línea corta encima.
+export function say(p: BrosPlayer, text: string, frames: number = 100): BrosPlayer {
+  return { ...p, say: { text, t: frames } };
+}
+
+// Consume un frame de vida del globo; al agotarse se limpia.
+export function tickSpeech(p: BrosPlayer): BrosPlayer {
+  if (!p.say) return p;
+  const t = (p.say.t ?? 0) - 1;
+  if (t <= 0) return { ...p, say: null };
+  return { ...p, say: { ...p.say, t } };
 }
