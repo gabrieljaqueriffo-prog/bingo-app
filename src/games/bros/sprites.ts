@@ -255,13 +255,22 @@ export function drawPlayer(ctx: Ctx, p: BrosPlayer, gTick: number) {
   const headCY = bodyTop - headR;
   ctx.fillStyle = skin;
   ctx.beginPath(); ctx.arc(cx, headCY, headR, 0, Math.PI * 2); ctx.fill();
-  // Cabello/gorra
-  ctx.fillStyle = hair;
-  ctx.beginPath(); ctx.arc(cx, headCY - headR * 0.35, headR * 0.85, Math.PI, 0); ctx.fill();
-  ctx.fillRect(cx - headR, headCY - headR * 0.5, headR * 2, headR * 0.4);
-  ctx.fillStyle = isRed ? "#e63946" : "#3a86ff";
-  ctx.beginPath(); ctx.arc(cx, headCY - headR * 0.4, headR * 0.95, Math.PI, 0); ctx.fill();
-  ctx.fillRect(cx - headR, headCY - headR * 0.42, headR * 2, headR * 0.42);
+  // Cabello/gorra (el ladrón de gorros puede haberte dejado pelado)
+  if (p.hatLost) {
+    ctx.fillStyle = hair;
+    ctx.beginPath(); ctx.arc(cx, headCY - headR * 0.35, headR * 0.85, Math.PI, 0); ctx.fill();
+    ctx.fillRect(cx - headR, headCY - headR * 0.5, headR * 2, headR * 0.4);
+    // Pelo despeinado por el susto
+    ctx.fillRect(cx - headR * 0.7, headCY - headR * 1.05, 3, 6);
+    ctx.fillRect(cx + headR * 0.3, headCY - headR * 1.05, 3, 6);
+  } else {
+    ctx.fillStyle = hair;
+    ctx.beginPath(); ctx.arc(cx, headCY - headR * 0.35, headR * 0.85, Math.PI, 0); ctx.fill();
+    ctx.fillRect(cx - headR, headCY - headR * 0.5, headR * 2, headR * 0.4);
+    ctx.fillStyle = isRed ? "#e63946" : "#3a86ff";
+    ctx.beginPath(); ctx.arc(cx, headCY - headR * 0.4, headR * 0.95, Math.PI, 0); ctx.fill();
+    ctx.fillRect(cx - headR, headCY - headR * 0.42, headR * 2, headR * 0.42);
+  }
 
   // Ojos
   const eyeY = headCY - headR * 0.1;
@@ -285,6 +294,31 @@ export function drawEnemy(ctx: Ctx, e: Enemy, gTick: number) {
   const bobY = e.flyer ? e.baseY! + Math.sin(gTick * 0.1 + e.x * 0.01) * 14 : e.y;
   const pulse = Math.sin(gTick * 0.15 + e.x) * 4;
   const w = e.w + (e.boss ? pulse * 0.2 : 0);
+  // Ladrón de gorros: bandido morado con antifaz (y el gorro robado si lo tiene).
+  if (e.thief) {
+    ctx.fillStyle = "#6a3fb5";
+    ctx.fillRect(e.x, bobY, e.w, e.h);
+    // Antifaz negro
+    ctx.fillStyle = "#111";
+    ctx.fillRect(e.x + 2, bobY + e.h * 0.22, e.w - 4, 7);
+    ctx.fillStyle = "#fff";
+    const ex = e.dir > 0 ? 2 : 0;
+    ctx.fillRect(e.x + e.w * 0.2 + ex, bobY + e.h * 0.24, 5, 5);
+    ctx.fillRect(e.x + e.w * 0.62 + ex, bobY + e.h * 0.24, 5, 5);
+    ctx.fillStyle = "#000";
+    ctx.fillRect(e.x + e.w * 0.2 + ex + 2, bobY + e.h * 0.26, 2, 3);
+    ctx.fillRect(e.x + e.w * 0.62 + ex + 2, bobY + e.h * 0.26, 2, 3);
+    ctx.fillStyle = "#1b0a24";
+    ctx.fillRect(e.x + 2, bobY + e.h - 6, 5, 6);
+    ctx.fillRect(e.x + e.w - 7, bobY + e.h - 6, 5, 6);
+    // Muestra el gorro robado con el color de su dueño
+    if (e.hasHat) {
+      ctx.fillStyle = e.hasHat === "red" ? "#e63946" : "#3a86ff";
+      ctx.beginPath(); ctx.arc(e.x + e.w / 2, bobY - 2, e.w * 0.42, Math.PI, 0); ctx.fill();
+      ctx.fillRect(e.x + 2, bobY - 3, e.w - 4, 4);
+    }
+    return;
+  }
   ctx.fillStyle = e.boss ? "#7b2fbe" : e.flyer ? "#31c46a" : "#c33c8a";
   ctx.fillRect(e.x - (w - e.w) / 2, bobY, w, e.h);
   ctx.fillStyle = "#fff";

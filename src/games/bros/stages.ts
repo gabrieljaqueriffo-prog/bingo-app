@@ -64,6 +64,9 @@ function etapa1(): StoryStage {
     { id: "f1", x: 760, y: 300, w: 24, h: 24, minX: 700, maxX: 900, dir: 1, speed: 2.2, flyer: true, baseY: 300, phase: 0 },
     { id: "e2", x: 1000, y: GROUND_Y - 36, w: 26, h: 36, minX: 940, maxX: 1110, dir: -1, speed: 2 },
     { id: "e3", x: 1330, y: GROUND_Y - 36, w: 26, h: 36, minX: 1250, maxX: 1470, dir: 1, speed: 2.4 },
+    // LADRÓN DE GORROS: te roba el gorro al tocarte y huye rápido. Estampenlo
+    // entre los dos para recuperarlo. 😱
+    { id: "t1", x: 1250, y: GROUND_Y - 36, w: 26, h: 36, minX: 1200, maxX: 1500, dir: -1, speed: 2.6, thief: true },
   ];
 
   return {

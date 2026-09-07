@@ -40,6 +40,7 @@ export interface BrosPlayer {
   interactCd?: number; // frames de enfriamiento para cargar/lanzar
   emote?: string | null; // emote rápido mostrado encima del jugador
   emoteT?: number; // frames restantes del emote
+  hatLost?: boolean; // el ladrón de gorros te dejó sin gorro
   // Globos de diálogo (humor de personaje): texto corto que flota encima.
   say?: { text: string; t: number } | null;
   hooking?: { x: number; y: number } | null; // gancho activo: punto anclado de la cuerda
@@ -120,6 +121,8 @@ export interface Enemy {
   flyer?: boolean; // enemigo volador que además bobea en vertical
   baseY?: number; // altura base del aleteo vertical
   phase?: number; // fase de animación del aleteo
+  thief?: boolean; // ladrón de gorros: roba al contacto y huye
+  hasHat?: PlayerId | null; // ¿de quién es el gorro que robó?
 }
 
 export const GROUND_Y = SCREEN_HEIGHT - 32;
@@ -475,6 +478,38 @@ export function updateEnemies(enemies: Enemy[]): Enemy[] {
     }
     return { ...e, x, dir, stun };
   });
+}
+
+// Ladrón de gorros: si toca a un jugador con gorro, se lo roba y huye rápido
+// en dirección contraria. Se lo recupera estampándolo (returnStolenHats).
+export function tickThief(enemies: Enemy[], players: BrosPlayer[]): { enemies: Enemy[]; players: BrosPlayer[] } {
+  const np = [...players];
+  const ne = enemies.map((e) => {
+    if (!e.thief || e.hasHat || (e.stun ?? 0) > 0) return e;
+    for (let i = 0; i < np.length; i++) {
+      const p = np[i];
+      if (p.hatLost || p.isBubble || p.caged || p.carriedBy) continue;
+      if (p.x < e.x + e.w && p.x + p.width > e.x && p.y < e.y + e.h && p.y + p.height > e.y) {
+        // ¡Robó! Huye en dirección contraria a la víctima, bien rápido.
+        np[i] = setEmote({ ...np[i], hatLost: true }, "😱");
+        const flee: 1 | -1 = e.x + e.w / 2 < p.x + p.width / 2 ? -1 : 1;
+        return { ...e, hasHat: p.id, dir: flee, speed: Math.max(e.speed, 4.4) };
+      }
+    }
+    return e;
+  });
+  return { enemies: ne, players: np };
+}
+
+// Si un ladrón CON gorro robado desapareció (lo estamparon), el gorro vuelve
+// volando a su dueño.
+export function returnStolenHats(before: Enemy[], after: Enemy[], players: BrosPlayer[]): BrosPlayer[] {
+  const alive = new Set(after.map((e) => e.id));
+  const stolen = before.filter((e) => e.thief && e.hasHat && !alive.has(e.id));
+  if (!stolen.length) return players;
+  return players.map((p) =>
+    stolen.some((s) => s.hasHat === p.id && p.hatLost) ? setEmote({ ...p, hatLost: false }, "🥳") : p,
+  );
 }
 
 // ¿Un jugador colisiona con un enemigo? (sin contar al jefe en su стun)
@@ -1159,6 +1194,11 @@ export function tickEmote(p: BrosPlayer): BrosPlayer {
   const t = (p.emoteT ?? 0) - 1;
   if (t <= 0) return { ...p, emote: null, emoteT: 0 };
   return { ...p, emoteT: t };
+}
+
+// Muestra un emote rápido encima del jugador (emoji + duración en frames).
+export function setEmote(p: BrosPlayer, emote: string, frames: number = 90): BrosPlayer {
+  return { ...p, emote, emoteT: frames };
 }
 
 // Globos de diálogo (humor de personaje): muestra una línea corta encima.

@@ -26,6 +26,8 @@ import {
   tickCage,
   tryCageRescue,
   updateEnemies,
+  tickThief,
+  returnStolenHats,
   aabbOverlap,
   attachCarried,
   tryGrab,
@@ -451,6 +453,9 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
         if (g.phase !== "playing" || g.winner) return g;
         const dir = keysRef.current.values().next().value ?? null;
         let enemies = updateEnemies(g.enemies);
+        const thiefTick = tickThief(enemies, g.players);
+        enemies = thiefTick.enemies;
+        const preStompEnemies = enemies;
         const eTick = g.eTick + 1;
         const coop = g.mode === "coop" || g.mode === "temple" || g.mode === "story";
         const collectedCoins: { x: number; y: number }[] = [];
@@ -549,6 +554,8 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
           const r = tryCageRescue(meP, foeP);
           if (r.rescued) players[players.findIndex((p) => p.id === meP.id)] = r.rescuer;
         }
+        // El gorro robado vuelve si estamparon al ladrón este frame.
+        const hatPlayers = returnStolenHats(preStompEnemies, enemies, players);
         // Empuje de cajas: caminar contra una caja la mueve (y puede dejarla
         // sobre una placa para dejarla presionada).
         const dirs: Partial<Record<PlayerId, number>> = {};
@@ -560,7 +567,7 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
             dirs[p.id] = p.vx !== 0 ? Math.sign(p.vx) : p.facing === "left" ? -1 : p.facing === "right" ? 1 : 0;
           }
         }
-        const pushed = pushCrates(players, g.tiles, dirs);
+        const pushed = pushCrates(hatPlayers, g.tiles, dirs);
         // Latch de rejas: si una reja se abrió (alguien pisó la placa), queda
         // trabada para siempre. Así nadie queda encerrado del otro lado.
         const opened = new Set<number>();

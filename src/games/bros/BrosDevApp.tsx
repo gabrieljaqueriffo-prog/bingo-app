@@ -9,6 +9,7 @@ import {
   pushCrates, reachFlag, resetPlayer, resolveCollisions, startHook, stompEnemy, tickEmote, tickHook, tickSpeech,
   cageExpired, putInCage, tickCage, tryCageRescue,
   tradeCoinsForLife, tryGrab, tryRescueBubble, tryThrow, updateBubble, updateEnemies,
+  tickThief, returnStolenHats,
   SCREEN_WIDTH, SCREEN_HEIGHT, storyStage, storyStageCount, storyStages,
   type BrosGameState, type BrosPlayer, type BrosTile, type Phase, type PlayerId,
 } from "./engine";
@@ -105,6 +106,9 @@ const step = (g: BrosGameState): BrosGameState => {
       return "stop" as const;
     };
     let enemies = updateEnemies(g.enemies);
+    const thiefTick = tickThief(enemies, g.players);
+    enemies = thiefTick.enemies;
+    const preStompEnemies = enemies;
     const eTick = g.eTick + 1;
     const collectedCoins: string[] = [];
     const collectedPowers: string[] = [];
@@ -141,6 +145,8 @@ const step = (g: BrosGameState): BrosGameState => {
       return hrt.player;
     });
 players = players.map((p) => { const carrier = players.find((q) => q.id === p.carriedBy); return carrier ? attachCarried(p, carrier) : p; });
+    // El gorro robado vuelve si estamparon al ladrón este frame.
+    players = returnStolenHats(preStompEnemies, enemies, players);
     // Rescate: caer sobre la jaula de tu pareja la rompe (rebote + monedas).
     for (let i = 0; i < players.length; i++) {
       const foe = players.find((q) => q.id !== players[i].id);
