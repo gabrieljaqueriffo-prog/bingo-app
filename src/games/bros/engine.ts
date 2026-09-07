@@ -31,7 +31,8 @@ export interface BrosPlayer {
   coyote: number; // frames de gracia para saltar tras dejar una plataforma
   shields: number; // escudos de estrella (aguantan un golpe de enemigo sin perder vida)
   // --- Mecánicas cooperativas ---
-  isBubble?: boolean; // ¿está atrapado en una burbuja esperando rescate?
+    isBubble?: boolean; // ¿está atrapado en una burbuja esperando rescate?
+  bubbleT?: number; // frames desde que entró en burbuja (para auto-rescate)
   caged?: boolean; // jaula estilo Donkey Kong: tu pareja te libera saltando encima
   cageT?: number; // frames para auto-liberación si ambos quedan enjaulados
   carrying?: PlayerId | null; // ¿a quién lleva sobre la cabeza?
@@ -78,6 +79,7 @@ export const GRAB_DY = 80;     // diferencia de altura máxima para poder cargar
 export const GRAB_CD = 24;     // frames de enfriamiento tras cargar/lanzar
 export const BUBBLE_TOP = 130; // altura a la que flota la burbuja de rescate
 export const BUBBLE_RISE = 2;  // velocidad de subida de la burbuja
+export const BUBBLE_TIMEOUT = 480; // ~8 segundos a 60fps: auto-rescate si nadie interviene
 export const EMOTE_FRAMES = 90;
 
 // --- Gancho con cuerda: lanzá la cuerda a un anillo y te deslizás hasta él ---
@@ -873,20 +875,32 @@ export function resolveCollisions(
   // No salirse por el borde izquierdo (el derecho lo marca la meta).
   if (p.x < 0) p.x = 0;
 
-  if (p.y > SCREEN_HEIGHT) {
+        if (p.y > SCREEN_HEIGHT) {
     if (opts?.coop) {
       // Cooperativo: caer al vacío no es muerte inmediata. El jugador queda en
-      // burbuja (isBubble) flotando hasta que la pareja lo rescate tocándolo.
+      // burbuja (isBubble) que flota cerca de su pareja hasta que ésta lo
+      // libere (tocando su AABB) o pasen BUBBLE_TIMEOUT segundos (auto-rescate).
+      const partner = players.find((q) => q.id !== p.id && !q.isBubble && !q.caged);
       p.lives -= 1;
       p.isBubble = true;
+      p.bubbleT = 0;
       p.carrying = null;
       p.carriedBy = null;
       p.vx = 0;
       p.vy = 0;
-      p.x = Math.max(p.x, 80); // la burbuja sube cerca de donde cayó
-      p.y = BUBBLE_TOP;
       p.onGround = false;
-      p.jumped = true; // evita doble salto mientras flota
+      p.jumped = true;
+      // La burbuja aparece cerca de la pareja (para que el rescate no dependa
+      // de posición exacta) y bobea hacia él lentamente.
+      if (partner) {
+        p.x = partner.x + partner.width / 2 - p.width / 2;
+        p.y = partner.y - 40 + Math.sin(p.anim * 0.3) * 3;
+      } else {
+        p.x = Math.max(p.x, 80);
+        p.y = BUBBLE_TOP;
+      }
+      p.emote = "🆘";
+      p.emoteT = EMOTE_FRAMES * 3; // mensaje de auxilio flotante
     } else {
       p.lives -= 1;
       p.x = p.id === "red" ? 100 : 160;
@@ -1069,16 +1083,35 @@ export function attachCarried(partner: BrosPlayer, carrier: BrosPlayer): BrosPla
   };
 }
 
-// Burbuja de rescate: el jugador no cae, sube hasta el tope y bobea suavemente
-// hasta que la pareja toque su caja (AABB) para liberarlo.
-export function updateBubble(p: BrosPlayer): BrosPlayer {
+// Burbuja de rescate: el jugador caído flota cerca de su pareja y bobea.
+// A los BUBBLE_TIMEOUT frames se libera solo (auto-rescate) para no trabar.
+export function updateBubble(p: BrosPlayer, partner?: BrosPlayer): BrosPlayer {
   if (!p.isBubble) return p;
-  const bob = Math.sin(p.anim * Math.PI * 1.4);
-  const y = p.y > BUBBLE_TOP ? p.y - BUBBLE_RISE : BUBBLE_TOP + bob * 4;
-  return { ...p, y, vx: 0, vy: 0, onGround: false };
+  const t = (p.bubbleT ?? 0) + 1;
+  // Auto-rescate: si la pareja no llega, se libera solo.
+  if (t >= BUBBLE_TIMEOUT) {
+    return {
+      ...p,
+      isBubble: false,
+      bubbleT: 0,
+      emote: null,
+      vy: -5,
+      onGround: false,
+    };
+  }
+  // Si hay pareja viva cerca, la burbuja se desplaza suavemente hacia ella
+  // (así el rescate no depende de posición exacta).
+  let y = p.y;
+  if (partner && !partner.isBubble) {
+    y = partner.y - 40 + Math.sin(t * 0.2) * 4;
+  } else {
+    y = BUBBLE_TOP + Math.sin(t * 0.15) * 3;
+  }
+  return { ...p, y, bubbleT: t, vx: 0, vy: 0, onGround: false };
 }
 
 // Rescate: si uno está en burbuja y el otro toca su AABB, se libera y salta.
+// El AABB de rescate es amplio (se activa al pasar cerca).
 export function tryRescueBubble(
   a: BrosPlayer,
   b: BrosPlayer,
@@ -1086,17 +1119,19 @@ export function tryRescueBubble(
   const free = (p: BrosPlayer): BrosPlayer => ({
     ...p,
     isBubble: false,
+    bubbleT: 0,
     carriedBy: null,
     carrying: null,
     interactCd: GRAB_CD,
-    vy: -3,
+    vy: -5,
     onGround: false,
+    emote: null,
   });
   if (a.isBubble && !b.isBubble && aabbOverlap(a, b)) {
-    return { a: free(a), b: { ...b, interactCd: GRAB_CD } };
+    return { a: free(a), b: { ...b, interactCd: GRAB_CD, emote: "👍", emoteT: EMOTE_FRAMES } };
   }
   if (b.isBubble && !a.isBubble && aabbOverlap(b, a)) {
-    return { a: { ...a, interactCd: GRAB_CD }, b: free(b) };
+    return { a: { ...a, interactCd: GRAB_CD, emote: "👍", emoteT: EMOTE_FRAMES }, b: free(b) };
   }
   return { a, b };
 }

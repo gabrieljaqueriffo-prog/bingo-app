@@ -119,7 +119,7 @@ const step = (g: BrosGameState): BrosGameState => {
         if (foe) { const r = tryCageRescue(foe, np); if (r.rescued) np = r.caged; }
         np = cageExpired(np);
       }
-      else if (np.isBubble) { np = updateBubble(np); const foe = g.players.find((q) => q.id !== p.id); if (foe && aabbOverlap(np, foe)) np = tryRescueBubble(np, foe).a; }
+             else if (np.isBubble) { const foe = g.players.find((q) => q.id !== p.id); np = updateBubble(np, foe); if (foe && aabbOverlap(np, foe)) np = tryRescueBubble(np, foe).a; }
       else if (np.carriedBy) { const cs = g.players.find((q) => q.id === np.carriedBy); np = cs ? attachCarried(np, cs) : np; np = { ...np, vx: 0, vy: 0, onGround: false, interactCd: Math.max(0, (np.interactCd ?? 0) - 1) }; }
       else { np = { ...np, interactCd: Math.max(0, (np.interactCd ?? 0) - 1) }; if (np.hooking) np = tickHook(np); else { np = applyInput(np, dirFor(p.id)); np = applyGravity(np); np = resolveCollisions(np, np.hooking ? [] : g.tiles, g.players); } }
       // Integrar la posición DESPUÉS de resolver colisiones (igual que BrosApp):

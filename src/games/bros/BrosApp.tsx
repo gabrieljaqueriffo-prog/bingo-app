@@ -32,7 +32,8 @@ import {
   tryThrow,
   startHook,
   tickHook,
-  updateBubble,
+    updateBubble,
+  tryRescueBubble,
   tickEmote,
   leverHeld,
   emote as setEmote,
@@ -470,10 +471,11 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
             np = cageExpired(np);
           } else if (np.isBubble) {
             // Burbuja de rescate: flota y, si la pareja toca tu caja, te liberás.
-            np = updateBubble(np);
-            const foe = g.players.find((q) => q.id !== selfIdRef.current);
+                                    const foe = g.players.find((q) => q.id !== selfIdRef.current);
+            np = updateBubble(np, foe);
             if (foe && aabbOverlap(np, foe)) {
-              np = { ...np, isBubble: false, carriedBy: null, carrying: null, interactCd: GRAB_CD, vy: -3, onGround: false };
+              const r = tryRescueBubble(np, foe);
+              np = r.a;
             }
           } else if (np.carriedBy) {
             // Nos están cargando: nuestra simulación obedece al portador.
