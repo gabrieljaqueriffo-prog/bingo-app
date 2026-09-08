@@ -164,8 +164,14 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
     }
   };
 
-  // Salto: acción discreta al presionar la tecla
+  // Salto: acción discreta al presionar la tecla. Blindado contra disparos
+  // fantasma/duplicados del navegador o del toque (doble evento, tap espurio):
+  // solo se permite UN salto por ventana corta. Esto evita el "salta solo"
+  // que aparecía al crear la sala (doble disparo fantasma del botón/tecla).
+  const lastJumpRef = useRef(0);
   const doJump = () => {
+    const now = performance.now();
+    if (now - lastJumpRef.current < 120) return; // ignora doble disparo fantasma
     const g = gameRef.current;
     const r = roomRef.current;
     if (!r || g.phase !== "playing" || g.winner) return;
@@ -173,6 +179,7 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
     if (!me) return;
     if (me.carriedBy) return; // te están cargando: no podés saltar
     if (!(me.onGround || me.coyote > 0 || me.hooking)) return;
+    lastJumpRef.current = now;
     const next: BrosGameState = {
       ...g,
       players: g.players.map((p) => (p.id === selfIdRef.current ? applyInput(p, "up") : p)),
