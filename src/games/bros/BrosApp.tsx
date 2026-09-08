@@ -69,6 +69,7 @@ import { storyStage, storyStageCount, storyStages } from "./engine";
 import "./stages"; // registra las etapas del mundo en el motor
 import BrosWorldMap from "./WorldMap";
 import { getWorldProgress, setWorldProgress } from "./progress";
+import { drawBackground, drawTile, drawPlayer, drawEnemy } from "./sprites";
 import "./bros.css";
 import { ChevronLeft, ChevronRight, ChevronUp, Share2 } from "lucide-react";
 
@@ -666,37 +667,12 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
     if (!canvas) return;
     const ctx = canvas.getContext("2d")!;
     const drawSprite = (p: BrosPlayer) => {
-      const base = p.id === "red" ? "#e63946" : "#3a86ff";
-      const dark = p.id === "red" ? "#8f1620" : "#1f56a8";
-      const s = 0.8 + Math.sin((p.anim + p.id.length) * Math.PI * 2) * 0.06;
-      const walk = p.onGround && Math.abs(p.vx) > 0;
-      const legSwing = walk ? Math.sin(p.anim * Math.PI * 2 * 2) : 0;
-      const jumpPose = !p.onGround ? 0.5 : 0;
-      // Sombras / contorno del cuerpo.
-      const bodyH = p.height * 0.72;
-      const bodyTop = p.y + p.height - bodyH;
-      ctx.fillStyle = dark;
-      ctx.fillRect(p.x + 1, bodyTop + 2, p.width - 2, bodyH - 2);
-      ctx.fillStyle = base;
-      ctx.fillRect(p.x, bodyTop, p.width - 4, bodyH - 4);
-      // Piernas: alternan al caminar, se recogen al saltar.
-      const legH = p.height * 0.22;
-      const legY = bodyTop + bodyH;
-      const off1 = (1 - legSwing) * 3 * (1 - jumpPose);
-      const off2 = (1 + legSwing) * 3 * (1 - jumpPose);
-      ctx.fillStyle = base;
-      ctx.fillRect(p.x + 3 + off1, legY, 7, legH + (jumpPose ? 4 : 0));
-      ctx.fillRect(p.x + p.width - 3 - 7 + off2, legY, 7, legH + (jumpPose ? 4 : 0));
-      // Cabeza (ojos según hacia dónde mira).
-      const eyeX = p.facing === "right" ? p.x + p.width - 10 : p.x + 8;
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(eyeX, bodyTop + 4, 6, 7);
-      ctx.fillStyle = "#0a0a0a";
-      ctx.fillRect(p.facing === "right" ? eyeX + 3 : eyeX, bodyTop + 6, 3, 4);
+      // Personaje dibujado bonito (mismo estilo que el playground).
+      drawPlayer(ctx, p, gameRef.current.eTick);
       // Escudo de estrella: anillo dorado pulsante.
       if ((p.shields ?? 0) > 0) {
         ctx.strokeStyle = "rgba(255, 200, 60, 0.9)";
-        ctx.lineWidth = s - 0.5 > 0.4 ? 3 : 2;
+        ctx.lineWidth = 3;
         ctx.strokeRect(p.x - 4, p.y - 4, p.width + 8, p.height + 8);
         ctx.fillStyle = "rgba(255, 210, 80, 0.25)";
         ctx.fillRect(p.x - 4, p.y - 4, p.width + 8, p.height + 8);
@@ -711,18 +687,8 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
       const camX = meNow
         ? Math.max(0, Math.min(meNow.x - SCREEN_WIDTH * 0.35, worldW - SCREEN_WIDTH))
         : 0;
-      const sky =
-        g.mode === "temple" ? ["#0a1a2f", "#041020"]
-        : g.mode === "coop"
-          ? g.level >= 3 ? ["#2a1a3a", "#12082a"]
-            : g.level === 2 ? ["#0f2740", "#081423"]
-            : ["#0d1b2a", "#051424"]
-        : ["#0d1b2a", "#051424"];
-      const grad = ctx.createLinearGradient(0, 0, 0, SCREEN_HEIGHT);
-      grad.addColorStop(0, sky[0]);
-      grad.addColorStop(1, sky[1]);
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+      // Fondo bonito con cielo, sol, nubes y colinas (atardecer en etapas altas).
+      drawBackground(ctx, camX, { dusk: g.mode === "coop" && g.level >= 3 });
 
       // Geometría del juego en coordenadas del mundo, desplazada por la cámara.
       ctx.save();
@@ -730,85 +696,11 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
 
       g.tiles.forEach((t) => {
         if (t.collected) return;
-        if (t.type === "gate") {
-          if (gateOpen(g.tiles, t.pair ?? 0, g.players)) return;
-          ctx.fillStyle = "#8fa3b8";
-          ctx.fillRect(t.x, t.y, t.w, t.h);
-          ctx.fillStyle = "#5c6e80";
-          for (let y = t.y + 6; y < t.y + t.h; y += 16) ctx.fillRect(t.x, y, t.w, 3);
-          return;
-        }
-        if (t.type === "lever") {
-          // Palanca: se mantiene presionada para abrir su portón.
-          const held = leverHeld(g.tiles, t.pair ?? 0, g.players);
-          ctx.fillStyle = held ? "#22c55e" : "#7d97ab";
-          ctx.fillRect(t.x, t.y, t.w, 10); // base
-          ctx.fillStyle = held ? "#a3e635" : "#f2c14e";
-          ctx.fillRect(t.x + t.w / 2 - 4, t.y - 16, 8, 16); // mango
-          ctx.fillStyle = held ? "#ecfccb" : "#fff";
-          ctx.beginPath();
-          ctx.arc(t.x + t.w / 2, t.y - 18, 4, 0, Math.PI * 2);
-          ctx.fill();
-          return;
-        }
-        if (t.type === "crate") {
-          // Caja empujable: tablones y cruz de refuerzo.
-          ctx.fillStyle = "#b5793a"; ctx.fillRect(t.x, t.y, t.w, t.h);
-          ctx.fillStyle = "#8f5a26";
-          ctx.fillRect(t.x, t.y, t.w, 4); ctx.fillRect(t.x, t.y + t.h - 4, t.w, 4);
-          ctx.fillRect(t.x, t.y, 4, t.h); ctx.fillRect(t.x + t.w - 4, t.y, 4, t.h);
-          ctx.strokeStyle = "#8f5a26"; ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.moveTo(t.x + 4, t.y + 4); ctx.lineTo(t.x + t.w - 4, t.y + t.h - 4);
-          ctx.moveTo(t.x + t.w - 4, t.y + 4); ctx.lineTo(t.x + 4, t.y + t.h - 4);
-          ctx.stroke();
-          return;
-        }
-        if (t.type === "hook") {
-          // Anillo de gancho: acercate y tocá CARGA para lanzar la cuerda.
-          ctx.strokeStyle = "#cbd5e1";
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.arc(t.x + t.w / 2, t.y + t.h / 2, 7, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.fillStyle = "#64748b";
-          ctx.beginPath();
-          ctx.arc(t.x + t.w / 2, t.y + t.h / 2, 2.5, 0, Math.PI * 2);
-          ctx.fill();
-          // Destello suave para que se note que es interactuable.
-          ctx.strokeStyle = `rgba(255,255,255,${0.25 + Math.sin(g.eTick * 0.08) * 0.2})`;
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.arc(t.x + t.w / 2, t.y + t.h / 2, 11, 0, Math.PI * 2);
-          ctx.stroke();
-          return;
-        }
-        ctx.fillStyle =
-          t.type === "ground" || t.type === "platform" ? "#8B4513"
-          : t.type === "coin" ? "#ffd700"
-          : t.type === "plate" ? (t.both ? "#b387ff" : "#f2c14e")
-          : t.type === "flag" ? "#22c55e"
-          : t.type === "power" ? "#ff9f2e"
-          : t.type === "heart" ? "#e63946"
-          : "#fff";
-        ctx.fillRect(t.x, t.y, t.w, t.h);
-        if (t.type === "power") {
-          // Estrella: power-up que da un escudo.
-          ctx.fillStyle = "#ffd700";
-          ctx.font = "13px monospace";
-          ctx.textAlign = "center";
-          ctx.fillText("★", t.x + t.w / 2, t.y + t.h - 1);
-        } else if (t.type === "heart") {
-          // Corazón: 1UP (vida extra).
-          ctx.fillStyle = "#fff";
-          ctx.font = "13px monospace";
-          ctx.textAlign = "center";
-          ctx.fillText("♥", t.x + t.w / 2, t.y + t.h - 1);
-        } else if (t.type === "plate" && t.both) {
-          // Placa doble: exige el peso de los dos jugadores.
-          ctx.fillStyle = "#fff";
-          ctx.fillText("2P", t.x + t.w / 2, t.y + t.h - 1);
-        }
+        const isOpen =
+          t.type === "gate" ? gateOpen(g.tiles, t.pair ?? 0, g.players)
+          : t.type === "lever" ? leverHeld(g.tiles, t.pair ?? 0, g.players)
+          : false;
+        drawTile(ctx, t, g.eTick, isOpen);
       });
       const flag = g.tiles.find((t) => t.type === "flag");
       if (flag) {
@@ -897,33 +789,8 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
           ctx.fillText(p.say.text, p.x + p.width / 2, p.y - (8+8));
         }
       });
-      g.enemies.forEach((e: Enemy) => {
-        const baseY = e.y;
-        const bobY = baseY + Math.sin((g.eTick + (parseInt(e.id.replace(/[^0-9]/g, "") || "0", 10) % 5)) / 6) * 2;
-        ctx.fillStyle = e.boss ? "#7b2fbe" : e.flyer ? "#22c55e" : "#d6418f";
-        ctx.fillRect(e.x, bobY, e.w, e.h);
-        ctx.strokeStyle = "#1b0a24";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(e.x, bobY, e.w, e.h);
-        ctx.fillStyle = "#fff";
-        const eyeY = bobY + e.h * 0.3;
-        ctx.fillRect(e.x + e.w * 0.22, eyeY, 5, 6);
-        ctx.fillRect(e.x + e.w * 0.62, eyeY, 5, 6);
-        ctx.fillStyle = "#000";
-        ctx.fillRect(e.x + e.w * 0.22 + (e.dir > 0 ? 2 : 0), eyeY, 2, 3);
-        ctx.fillRect(e.x + e.w * 0.62 + (e.dir > 0 ? 2 : 0), eyeY, 2, 3);
-        if (e.boss) {
-          const hp = e.hp ?? BOSS_HP;
-          ctx.fillStyle = "#1b0a24";
-          ctx.fillRect(e.x - 3, bobY - 12, e.w + 6, 6);
-          ctx.fillStyle = hp > BOSS_HP / 2 ? "#ffd700" : hp > 1 ? "#ff9f2e" : "#e63946";
-          ctx.fillRect(e.x - 1, bobY - 11, Math.max(0, (e.w + 2) * (hp / BOSS_HP)), 4);
-          ctx.fillStyle = "#ffd700";
-          ctx.font = "10px monospace";
-          ctx.textAlign = "center";
-          ctx.fillText("🎯 JEFE", e.x + e.w / 2, bobY + e.h + 12);
-        }
-      });
+      // Enemigos dibujados bonito: caminantes, voladores, ladrón y jefe.
+      g.enemies.forEach((e: Enemy) => drawEnemy(ctx, e, g.eTick));
       if (g.mode === "temple") {
         const plates = g.tiles.filter((t) => t.type === "plate");
         const plateByPair = (pair: number) => plates.find((t) => t.pair === pair);
