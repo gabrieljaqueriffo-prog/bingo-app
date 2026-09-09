@@ -9,6 +9,10 @@ export const JUMP_FORCE = -12;
 export const MOVE_SPEED = 3.5;
 export const MAX_FALL_SPEED = 15;
 
+// Poder de vuelo (pluma): al agarrarla podés subir manteniendo el salto.
+export const FLY_FRAMES = 220; // ~7 segundos a 30fps
+export const FLY_SPEED = -5; // velocidad de ascenso mientras volás
+
 // Velocidad de animación (frames por segundo que avanza la walk cycle).
 export const ANIM_FPS = 8;
 
@@ -44,11 +48,15 @@ export interface BrosPlayer {
   // Globos de diálogo (humor de personaje): texto corto que flota encima.
   say?: { text: string; t: number } | null;
   hooking?: { x: number; y: number } | null; // gancho activo: punto anclado de la cuerda
+  // Poder de vuelo (pluma): mientras flyT > 0 podés subir manteniendo el salto.
+  fly?: boolean;
+  flyT?: number;
 }
 
 export type TileType =
   | "ground" | "platform" | "coin" | "flag"
-  | "plate" | "gate" | "lever" | "power" | "heart" | "hook" | "crate";
+  | "plate" | "gate" | "lever" | "power" | "heart" | "hook" | "crate"
+  | "block" | "feather";
 
 export interface BrosTile {
   type: TileType;
@@ -219,6 +227,16 @@ export const flagAtGround = (x: number): BrosTile => ({ type: "flag", x, y: GROU
 // Caja empujable: se empuja caminando hacia ella y, apoyada sobre una placa,
 // la mantiene presionada (el clásico "peso que deja el botón apretado").
 export const crate = (x: number, y: number, s = 36): BrosTile => ({ type: "crate", x, y, w: s, h: s });
+// Bloque "?" estilo Mario: sólido, se puede parar encima y, al golpearlo desde
+// abajo (saltando contra el techo), otorga un poder. Se "gasta" al usarlo.
+export const block = (x: number, y: number, s = 34): BrosTile => ({ type: "block", x, y, w: s, h: s });
+// Pluma (poder de vuelo): flota y al agarrarla te da el poder de volar.
+export const feather = (x: number, y: number): BrosTile => ({ type: "feather", x, y, w: 18, h: 18 });
+// Recompensa por completar: cuántas monedas quedan y si están todas.
+export const stageCoinsLeft = (tiles: BrosTile[]): number =>
+  tiles.reduce((n, t) => n + (t.type === "coin" && !t.collected ? 1 : 0), 0);
+export const stageCoinsTotal = (tiles: BrosTile[]): number =>
+  tiles.reduce((n, t) => n + (t.type === "coin" ? 1 : 0), 0);
 
 // ---------------------------------------------------------------------------
 // Modo historia ("story"): el mundo co-op de etapas diseñadas a mano. Las
@@ -852,6 +870,7 @@ export function resolveCollisions(
     (t) =>
       t.type === "ground" ||
       t.type === "platform" ||
+      t.type === "block" ||
       (t.type === "gate" && !gateOpen(tiles, t.pair ?? 0, players)),
   );
 
@@ -1041,6 +1060,76 @@ export function collectHeart(
     player: p,
     collected: collected.map((t) => ({ ...t, collected: true })),
   };
+}
+
+// Golpear un bloque "?" desde abajo (saltando contra el techo): otorga el poder
+// de vuelo (pluma) y el bloque se "gasta". Detecta el cruce de la cabeza con el
+// borde inferior del bloque usando la posición previa.
+export function hitBlock(
+  player: BrosPlayer,
+  tiles: BrosTile[],
+  prevHeadY?: number,
+): { player: BrosPlayer; tiles: BrosTile[]; hit: boolean } {
+  let hit = false;
+  const nt = tiles.map((t) => {
+    if (t.type !== "block" || t.collected) return t;
+    const overX = player.x + player.width > t.x && player.x < t.x + t.w;
+    const crossedFromBelow =
+      prevHeadY !== undefined &&
+      prevHeadY >= t.y + t.h - 1 &&
+      player.y <= t.y + t.h;
+    if (overX && crossedFromBelow) {
+      hit = true;
+      return { ...t, collected: true };
+    }
+    return t;
+  });
+  if (!hit) return { player, tiles: nt, hit: false };
+  return {
+    player: { ...player, fly: true, flyT: FLY_FRAMES, vy: 3, onGround: false },
+    tiles: nt,
+    hit: true,
+  };
+}
+
+// Recolectar una pluma: otorga el poder de volar (temporada).
+export function collectFeather(
+  player: BrosPlayer,
+  tiles: BrosTile[],
+): { player: BrosPlayer; collected: BrosTile[] } {
+  const p = { ...player };
+  const remaining: BrosTile[] = [];
+  const collected: BrosTile[] = [];
+  for (const t of tiles) {
+    if (t.type === "feather" && !t.collected) {
+      const overlap =
+        p.x < t.x + t.w && p.x + p.width > t.x && p.y < t.y + t.h && p.y + p.height > t.y;
+      if (overlap) {
+        collected.push(t);
+        p.fly = true;
+        p.flyT = FLY_FRAMES;
+        continue;
+      }
+    }
+    remaining.push(t);
+  }
+  return {
+    player: p,
+    collected: collected.map((t) => ({ ...t, collected: true })),
+  };
+}
+
+// Tick del poder de vuelo: mientras dure, si mantenés el salto subís (jetpack).
+export function tickFly(player: BrosPlayer, jumpHeld: boolean): BrosPlayer {
+  const p = { ...player };
+  if (!p.fly) return p;
+  const t = (p.flyT ?? 0) - 1;
+  if (t <= 0) return { ...p, fly: false, flyT: 0 };
+  if (jumpHeld) {
+    p.vy = FLY_SPEED; // subís mientras mantenés el salto (jetpack)
+    p.onGround = false;
+  }
+  return { ...p, flyT: t };
 }
 
 export function reachFlag(player: BrosPlayer, tiles: BrosTile[]): boolean {

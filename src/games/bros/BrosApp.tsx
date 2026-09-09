@@ -23,6 +23,7 @@ import {
   resetPlayer,
   resolveCollisions,
   stompEnemy,
+  stageCoinsLeft,
   tickCage,
   tryCageRescue,
   updateEnemies,
@@ -38,6 +39,7 @@ import {
   tryRescueBubble,
   tickEmote,
   tickSpeech,
+  hitBlock, collectFeather, tickFly,
   leverHeld,
   emote as setEmote,
   ANIM_FPS,
@@ -95,7 +97,11 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
   gameRef.current = game;
   const roomRef = useRef(room);
   roomRef.current = room;
-  const keysRef = useRef<Set<"left" | "right">>(new Set());
+  const keysRef = useRef<Set<"left" | "right" | "up">>(new Set());
+  // Premio "todas las monedas": se da UNA vez por etapa (+1 vida a cada uno).
+  const perfectGivenRef = useRef(false);
+  const [bonusMsg, setBonusMsg] = useState<string>("");
+  const bonusMsgStartRef = useRef(0);
   // Buffer de snapshots del rival para interpolar su posición (reduce saltos).
   const snapBufRef = useRef<SnapshotBuffer>(new SnapshotBuffer());
   // Banner de transición de etapa: guarda el nivel mostrado y hasta cuándo.
@@ -294,14 +300,14 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
       const dir = dirs[e.key];
       if (dir) { keysRef.current.add(dir); e.preventDefault(); }
-      if (jumpKeys.has(e.key)) { if (!e.repeat) doJump(); e.preventDefault(); }
+      if (jumpKeys.has(e.key)) { if (!e.repeat) { doJump(); keysRef.current.add("up"); } e.preventDefault(); }
       if (e.key === "e" || e.key === "E") { doAction(); e.preventDefault(); }
       if (e.key === "q" || e.key === "Q") { doEmote(); e.preventDefault(); }
     };
     const up = (e: KeyboardEvent) => {
       const dir = dirs[e.key];
       if (dir) keysRef.current.delete(dir);
-      if (jumpKeys.has(e.key)) doJumpCut();
+      if (jumpKeys.has(e.key)) { doJumpCut(); keysRef.current.delete("up"); }
     };
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
@@ -312,59 +318,121 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Suscripción a cambios remotos: toma el estado de la sala pero
-  // conserva SIEMPRE tu propio jugador (tu simulación local manda sobre vos).
+  // ── Reconciliación remota segura (online): preserva tu input local como
+  //    autoridad, salvo cuando la pareja te carga/lanza (decisiones que
+  //    afectan tu físico = vienen del otro, hay que obedecerlas).
+  //    Todo se aplica en un solo setGame para evitar race con el intervalo tick.
+  const lastRemoteRevApplied = useRef<number>(-1);
+  const ownedInputVersionRef = useRef<number>(0);
+
   useEffect(() => {
     if (!room) return;
     const code = room.code;
     const stop = subscribeBrosRoom(code, (updated) => {
-      if (updated.rev < revRef.current) return;
-      revRef.current = updated.rev;
-      setRoom(updated);
+      if (updated.rev <= lastRemoteRevApplied.current) return;
+      lastRemoteRevApplied.current = updated.rev;
+      setRoom(updated); // UI de la sala
+
+      // Reconciliación: aplicamos en UN solo setGame, determinista, para
+      // evitar races con el intervalo tick local.
       setGame((g) => {
-        const mine = g.players.find((p) => p.id === selfIdRef.current);
-        // Si cambió de etapa, respete tu jugador al punto de partida del nivel nuevo.
+        const meId = selfIdRef.current;
+        const gMe = g.players.find((p) => p.id === meId);
+        const upMe = updated.state.players.find((p) => p.id === meId);
+        const upOther = updated.state.players.find((p) => p.id !== meId);
+
+        // Si cambié de nivel, arranco desde el spawn del servidor (nuevo mapa).
         const levelChanged = updated.state.level !== g.level;
-        const keep = mine && !levelChanged ? mine : updated.state.players.find((p) => p.id === selfIdRef.current);
-        const other = updated.state.players.find((p) => p.id !== selfIdRef.current);
+        const base =
+          !levelChanged && gMe ? gMe :
+          upMe ?? gMe ?? g.players[0] ?? g.players[0];
+
+        // ── Tu jugador (local): preservar posición y velocidad para evitar
+        //    el "salto" o "regreso" cuando llega un snapshot del servidor.
+        //    Solo actualizamos estado no-físico (vidas, caged, emote, etc.).
+        const mine: BrosPlayer = levelChanged
+          ? base
+          : (
+            // Caso: la pareja hizo algo sobre ti (te cargó, te lanzó, te soltó).
+            // En ese caso, el servidor lleva la decisión y nosotros la aplicamos.
+            // PERO: nunca sobrescribimos vx/vy del jugador local excepto por impulse
+            // explícito que haya sido confirmado (lastThrow).
+            !upOther
+              ? base
+              : upOther.carrying === meId && !base.carriedBy && !base.isBubble
+                ? { ...base, carriedBy: upOther.id as PlayerId, carrying: null }
+                : !upOther.carrying && base.carriedBy === upOther.id
+                  ? { ...base, carriedBy: null }
+                  : base
+          );
+
+        // ── El otro jugador (remoto): usamos su snapshot del servidor.
+        //    Si no llega, mantenemos la versión local actual para evitar saltos.
+        const otherState = updated.state.players.find((p) => p.id !== meId);
+        let other: BrosPlayer;
+        if (g.players.find((p) => p.id !== meId)) {
+          // El rival ya existe en nuestra versión local → mezclamos estados.
+          const localOther = g.players.find((p) => p.id !== meId)!;
+          other = {
+            ...localOther,
+            ...(upOther ?? {}),
+            // Conservar posición local si el servidor no trae una reciente
+            // (evita que salte si el servidor envía snapshot viejo o (0,0)).
+            x: upOther?.x != null ? upOther.x : localOther.x,
+            y: upOther?.y != null ? upOther.y : localOther.y,
+            vx: upOther?.vx != null ? upOther.vx : localOther.vx,
+            vy: upOther?.vy != null ? upOther.vy : localOther.vy,
+          };
+        } else {
+          // Primer frame del rival → usar snapshot del servidor o fallback.
+          other = upOther ?? {
+            id: meId === "red" ? "blue" : "red",
+            x: 160,
+            y: 300,
+            vx: 0,
+            vy: 0,
+            onGround: false,
+            facing: "right",
+            lives: 3,
+            coins: 0,
+            width: 30,
+            height: 48,
+            jumped: false,
+            anim: 0,
+            coyote: 0,
+            shields: 0,
+            isBubble: false,
+            carrying: null,
+            carriedBy: null,
+            interactCd: 0,
+            emote: null,
+            emoteT: 0,
+          };
+        }
+
+        // Tiles: si yo ya recolecté algo, que no renazca aunque el servidor venga
+        // con una copia vieja/exterior.
+        const tiles = updated.state.tiles.map((rt) => {
+          const lt = g.tiles.find((t) => t.type === rt.type && t.x === rt.x && t.y === rt.y);
+          return lt?.collected ? { ...rt, collected: true } : rt;
+        });
+
+        // Si nos lanzaron por DB y el broadcast se perdió, asegurar impulso.
+        const lt = updated.state.lastThrow;
+        const hasLB = lt && lt.seq > (lastThrowSeq.current ?? 0) && lt.target === meId;
+        if (hasLB) lastThrowSeq.current = lt.seq;
+
         return {
           ...updated.state,
-          players: updated.state.players.map((p) => {
-            if (p.id !== selfIdRef.current || !keep) return p;
-            // Reconciliación de carga por la ruta de la DB (respaldo del
-            // broadcast): si la pareja nos carga, obedecemos; si soltó, soltamos.
-            if (other?.carrying === p.id && !p.carriedBy && !p.isBubble) {
-              return { ...p, carriedBy: other.id, carrying: null, jumped: false };
-            }
-            if (!other?.carrying && p.carriedBy === other?.id) {
-              return { ...p, carriedBy: null, jumped: false };
-            }
-            return p;
-          }),
-          // Las monedas/items que YO ya marqué como recolectados no renacen
-          // aunque el estado remoto venga con la copia vieja de los tiles.
-          tiles: updated.state.tiles.map((rt) => {
-            const lt = g.tiles.find((t) => t.type === rt.type && t.x === rt.x && t.y === rt.y);
-            return lt?.collected ? { ...rt, collected: true } : rt;
-          }),
-        };
+          players: [
+            { ...mine, ...(hasLB ? { vx: lt!.vx, vy: lt!.vy, carriedBy: null, hooking: null, onGround: false, jumped: false } : {}) },
+            other,
+          ],
+          tiles,
+        } satisfies BrosGameState;
       });
-      // Respaldo del lanzamiento por la DB (por si el broadcast se perdió).
-      const lt = updated.state.lastThrow;
-      if (lt && lt.seq > lastThrowSeq.current && lt.target === selfIdRef.current) {
-        lastThrowSeq.current = lt.seq;
-        setGame((g) => ({
-          ...g,
-          players: g.players.map((p) =>
-            p.id === selfIdRef.current
-              ? { ...p, carriedBy: null, hooking: null, onGround: false, jumped: false, vx: lt.vx, vy: lt.vy }
-              : p,
-          ),
-        }));
-      }
     });
     return stop;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room?.code]);
 
   // Broadcast Realtime: difundimos nuestro estado ~10 veces/seg para que el
@@ -469,6 +537,9 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
         const collectedCoins: { x: number; y: number }[] = [];
         const collectedPowers: { x: number; y: number }[] = [];
         const collectedHearts: { x: number; y: number }[] = [];
+        const collectedFeathers: { x: number; y: number }[] = [];
+        const hitBlocks: { x: number; y: number }[] = [];
+        const jumpHeld = keysRef.current.has("up");
         const players = g.players.map((p) => {
           if (p.id !== selfIdRef.current) return p; // el rival llega por red
           let np: BrosPlayer = { ...p, anim: p.anim + 1 / ANIM_FPS };
@@ -516,7 +587,13 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
             // saber dónde está el compañero; en coop, caer = burbuja (opts.coop).
             np = resolveCollisions(np, g.tiles, g.players, { coop });
             const prevFeetY = np.y + np.height; // para stomp "swept" anti-tunneling
+            const prevHeadY = np.y; // cabeza antes de moverse (para bloques "?")
             np = { ...np, x: np.x + np.vx, y: np.y + np.vy };
+            // Poder de vuelo: mientras haya pluma, mantener el salto sube.
+            np = tickFly(np, jumpHeld);
+            // Golpear un bloque "?" desde abajo otorga el poder de volar.
+            const hb = hitBlock(np, g.tiles, prevHeadY);
+            if (hb.hit) { np = hb.player; const bl = hb.tiles.find((t) => t.type === "block" && t.collected); if (bl) hitBlocks.push({ x: bl.x, y: bl.y }); }
             // Si aterrizamos mientras estábamos deslizándonos por la cuerda,
             // la soltamos (ya llegamos).
             if (np.onGround && np.hooking) np = { ...np, hooking: null };
@@ -552,7 +629,9 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
           if (pw.collected.length) collectedPowers.push(...pw.collected);
           const hrt = collectHeart(pw.player, g.tiles);
           if (hrt.collected.length) collectedHearts.push(...hrt.collected);
-          return hrt.player;
+          const fth = collectFeather(hrt.player, g.tiles);
+          if (fth.collected.length) collectedFeathers.push(...fth.collected);
+          return fth.player;
         });
         // Rescate de jaula: si caigo sobre la jaula de mi pareja, reboto, gano
         // monedas y ella se libera (su simulación ve mi snapshot y se suelta).
@@ -569,7 +648,15 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
         const dirs: Partial<Record<PlayerId, number>> = {};
         for (const p of players) {
           if (p.id === selfIdRef.current) {
-            dirs[p.id] = keysRef.current.has("left") ? -1 : keysRef.current.has("right") ? 1 : 0;
+            // El jugador local: si está siendo CARGADO por el otro, su movimiento
+            // proviene del otro (no de nuestras flechas). Si fue LANZADO este frame,
+            // la velocidad viene del lanzamiento, no del input. Ignoramos input local
+            // en esos casos para no chocar con la reconciliación remota.
+            const beingCarried = p.carriedBy !== null && p.carriedBy !== selfIdRef.current;
+            const justThrown = p.vy > 0 && p.vy > Math.abs(p.vx) * 2 && !p.onGround;
+            dirs[p.id] = (!beingCarried && !justThrown)
+              ? keysRef.current.has("left") ? -1 : keysRef.current.has("right") ? 1 : 0
+              : 0;
           } else {
             // El rival: usamos su vx sincronizada; si está quieto, hacia dónde mira.
             dirs[p.id] = p.vx !== 0 ? Math.sign(p.vx) : p.facing === "left" ? -1 : p.facing === "right" ? 1 : 0;
@@ -600,6 +687,8 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
         markCollected("coin", collectedCoins);
         markCollected("power", collectedPowers);
         markCollected("heart", collectedHearts);
+        markCollected("feather", collectedFeathers);
+        markCollected("block", hitBlocks);
         const me = players.find((p) => p.id === selfIdRef.current);
         const foe = players.find((p) => p.id !== selfIdRef.current);
         let winner: PlayerId | null = g.winner;
@@ -623,7 +712,17 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
             if (foe.lives <= 0) { winner = me.id; phase = "finished"; }
           }
         }
-        return { ...g, tiles, players: pushed.players, winner, phase, enemies, eTick };
+        // Premio "todas las monedas": si no queda ninguna y no se dio aún,
+        // otorgamos +1 vida a cada uno y mostramos celebración.
+        let finalPlayers = pushed.players;
+        if (stageCoinsLeft(tiles) === 0 && !perfectGivenRef.current) {
+          perfectGivenRef.current = true;
+          finalPlayers = finalPlayers.map((pl) => ({ ...pl, lives: Math.min(6, pl.lives + 1) }));
+          setBonusMsg("¡PERFECTO! Todas las monedas + ❤");
+          bonusMsgStartRef.current = Date.now();
+          window.setTimeout(() => setBonusMsg(""), 2600);
+        }
+        return { ...g, tiles, players: finalPlayers, winner, phase, enemies, eTick };
       });
     }, 1000 / 30);
     const commit = setInterval(() => {
@@ -652,6 +751,7 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
       stageLevelRef.current = game.level;
       stageUntilRef.current = Date.now() + 2200;
     }
+    if (game.level !== prevLevel.current) perfectGivenRef.current = false;
     if (game.mode === "story" && game.level > getWorldProgress()) {
       setWorldProgress(game.level);
       setProgress(getWorldProgress());
@@ -851,6 +951,18 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
           g.mode === "story" ? (storyStage(stageLevelRef.current - 1)?.name ?? "") : "¡Adelante, bros!",
           SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 28,
         );
+        ctx.restore();
+      }
+      // Premio "todas las monedas": aviso que se desvanece.
+      if (bonusMsg) {
+        const fade = Math.min(1, (3500 - (Date.now() - bonusMsgStartRef.current)) / 600);
+        ctx.save();
+        ctx.fillStyle = `rgba(0,0,0,${0.6})`;
+        ctx.fillRect(SCREEN_WIDTH / 2 - 170, 84, 340, 46);
+        ctx.fillStyle = `rgba(255,210,80,${Math.max(0, fade)})`;
+        ctx.font = "bold 16px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText(bonusMsg, SCREEN_WIDTH / 2, 113);
         ctx.restore();
       }
 
@@ -1077,9 +1189,9 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
                 type="button"
                 className="bros-pad jump"
                 aria-label="Saltar"
-                onPointerDown={doJump}
-                onPointerUp={doJumpCut}
-                onPointerCancel={doJumpCut}
+                onPointerDown={() => { doJump(); keysRef.current.add("up"); }}
+                onPointerUp={() => { doJumpCut(); keysRef.current.delete("up"); }}
+                onPointerCancel={() => { doJumpCut(); keysRef.current.delete("up"); }}
                 onPointerLeave={doJumpCut}
               >
                 <ChevronUp size={38} />

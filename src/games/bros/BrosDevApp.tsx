@@ -10,6 +10,7 @@ import {
   cageExpired, putInCage, tickCage, tryCageRescue,
   tradeCoinsForLife, tryGrab, tryRescueBubble, tryThrow, updateBubble, updateEnemies,
   tickThief, returnStolenHats,
+  hitBlock, collectFeather, tickFly,
   SCREEN_WIDTH, SCREEN_HEIGHT, storyStage, storyStageCount, storyStages,
   type BrosGameState, type BrosPlayer, type BrosTile, type Phase, type PlayerId,
 } from "./engine";
@@ -113,6 +114,10 @@ const step = (g: BrosGameState): BrosGameState => {
     const collectedCoins: string[] = [];
     const collectedPowers: string[] = [];
     const collectedHearts: string[] = [];
+    const collectedFeathers: string[] = [];
+    const hitBlocks: string[] = [];
+    const jumpHeld = (id: PlayerId) =>
+      id === "red" ? keys.has("w") || keys.has("W") : keys.has("ArrowUp");
     let players = g.players.map((p) => {
       let np: BrosPlayer = { ...p, anim: p.anim + 1 / 8 };
       np = tickEmote(np);
@@ -129,7 +134,13 @@ const step = (g: BrosGameState): BrosGameState => {
       else { np = { ...np, interactCd: Math.max(0, (np.interactCd ?? 0) - 1) }; if (np.hooking) np = tickHook(np); else { np = applyInput(np, dirFor(p.id)); np = applyGravity(np); np = resolveCollisions(np, np.hooking ? [] : g.tiles, g.players); } }
       // Integrar la posición DESPUÉS de resolver colisiones (igual que BrosApp):
       // resolveCollisions decide aterrizajes/bloqueos con posición previa + v.
+      const prevHeadY = np.y; // cabeza antes del movimiento (para bloques "?")
       np = { ...np, x: np.x + np.vx, y: np.y + np.vy };
+      // Podr de vuelo: mientras haya pluma, mantener el salto sube.
+      np = tickFly(np, jumpHeld(p.id));
+      // Golpear un bloque "?" desde abajo otorga el poder de volar.
+      const hb = hitBlock(np, g.tiles, prevHeadY);
+      if (hb.hit) { np = hb.player; const bl = hb.tiles.find((t) => t.type === "block" && t.collected); if (bl) hitBlocks.push(`${bl.x},${bl.y}`); }
       if (np.onGround && np.hooking) np = { ...np, hooking: null };
       // Tope derecho del mundo de la etapa.
       if (np.x > (g.worldW ?? SCREEN_WIDTH) - np.width) np = { ...np, x: (g.worldW ?? SCREEN_WIDTH) - np.width };
@@ -142,7 +153,8 @@ const step = (g: BrosGameState): BrosGameState => {
       const wl = tradeCoinsForLife(c.player);
       const pw = collectPower(wl, g.tiles); if (pw.collected.length) pw.collected.forEach((t) => collectedPowers.push(`${t.x},${t.y}`));
       const hrt = collectHeart(pw.player, g.tiles); if (hrt.collected.length) hrt.collected.forEach((t) => collectedHearts.push(`${t.x},${t.y}`));
-      return hrt.player;
+      const fth = collectFeather(hrt.player, g.tiles); if (fth.collected.length) fth.collected.forEach((t) => collectedFeathers.push(`${t.x},${t.y}`));
+      return fth.player;
     });
 players = players.map((p) => { const carrier = players.find((q) => q.id === p.carriedBy); return carrier ? attachCarried(p, carrier) : p; });
     // El gorro robado vuelve si estamparon al ladrón este frame.
@@ -177,7 +189,7 @@ players = players.map((p) => { const carrier = players.find((q) => q.id === p.ca
     }
     }
     const mark = (type: string, list: string[]) => { if (!list.length) return; const ks = new Set(list); tiles = tiles.map((t) => (t.type === type && ks.has(`${t.x},${t.y}`) ? { ...t, collected: true } : t)); };
-    mark("coin", collectedCoins); mark("power", collectedPowers); mark("heart", collectedHearts);
+    mark("coin", collectedCoins); mark("power", collectedPowers); mark("heart", collectedHearts); mark("feather", collectedFeathers); mark("block", hitBlocks);
     const me = players.find((p) => p.id === "red"); const foe = players.find((p) => p.id === "blue");
     let winner: PlayerId | null = g.winner, phase: Phase = g.phase;
     if (me && foe && reachFlag(me, tiles) && reachFlag(foe, tiles)) { phase = "finished"; winner = null; }

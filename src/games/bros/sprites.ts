@@ -180,6 +180,40 @@ export function drawTile(ctx: Ctx, t: BrosTile, gTick: number, open: boolean) {
     ctx.fillText("★", t.x + t.w / 2, t.y + t.h / 2 + 4);
     return;
   }
+  if (t.type === "block") {
+    // Bloque "?" estilo Mario: dorado con "?" pulante; gastado = gris.
+    const used = t.collected;
+    ctx.fillStyle = used ? "#8a8f98" : "#f2a900";
+    ctx.fillRect(t.x, t.y, t.w, t.h);
+    ctx.fillStyle = used ? "#b4bac4" : "#ffd24f";
+    ctx.fillRect(t.x + 3, t.y + 2, t.w - 6, t.h - 5);
+    ctx.strokeStyle = used ? "#5c6169" : "#a06a00";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(t.x + 1.5, t.y + 1.5, t.w - 3, t.h - 3);
+    // 4 remaches en las esquinas
+    ctx.fillStyle = used ? "#5c6169" : "#a06a00";
+    ctx.fillRect(t.x + 2, t.y + 2, 3, 3); ctx.fillRect(t.x + t.w - 5, t.y + 2, 3, 3);
+    ctx.fillRect(t.x + 2, t.y + t.h - 5, 3, 3); ctx.fillRect(t.x + t.w - 5, t.y + t.h - 5, 3, 3);
+    if (!used) {
+      const bob = Math.sin(gTick * 0.12) * 1.5;
+      ctx.fillStyle = "#7a4a00";
+      ctx.font = "bold 16px monospace"; ctx.textAlign = "center";
+      ctx.fillText("?", t.x + t.w / 2, t.y + t.h / 2 + 6 + bob);
+    }
+    return;
+  }
+  if (t.type === "feather") {
+    // Pluma (poder de vuelo): blanca con tallo, flota y destella.
+    const bob = Math.sin(gTick * 0.1 + t.x) * 2;
+    const cx = t.x + t.w / 2, cy = t.y + t.h / 2 + bob;
+    ctx.fillStyle = "rgba(255,255,255,.15)"; ctx.beginPath();
+    ctx.arc(cx, cy, 14 + Math.sin(gTick * 0.1) * 2, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#cbd5e1"; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.fillStyle = "#ffd24f"; ctx.beginPath(); ctx.arc(cx, cy, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + 5, cy - 9); ctx.stroke();
+    return;
+  }
   if (t.type === "heart") {
     const cx = t.x + t.w / 2, cy = t.y + t.h / 2 + Math.sin(gTick * 0.1) * 2;
     ctx.fillStyle = "#e63946";

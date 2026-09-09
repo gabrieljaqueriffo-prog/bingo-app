@@ -7,6 +7,8 @@ import {
   platform,
   coin,
   crate,
+  block,
+  feather,
   flagAtGround,
   registerStoryStages,
   type BrosTile,
@@ -56,6 +58,9 @@ function etapa1(): StoryStage {
   tiles.push(platform(2060, GROUND_Y - 300, 90));
   tiles.push(platform(2220, GROUND_Y - 200, 90));
   tiles.push(...coinRow(2085, GROUND_Y - 345, 4)); // premio arriba
+  // Bloque "?": al golpearlo desde abajo te da el poder de volar. Está en la
+  // parte alta de la escalada, entre las plataformas, para invitar a subir.
+  tiles.push(block(2060, GROUND_Y - 360));
   tiles.push({ type: "plate", x: 2320, y: GROUND_Y - 12, w: 56, h: 12, pair: 2 });
   tiles.push({ type: "gate", x: 2380, y: 240, w: 16, h: GROUND_Y - 240, pair: 2 });
   tiles.push({ type: "plate", x: 2450, y: GROUND_Y - 12, w: 56, h: 12, pair: 2 });
@@ -68,6 +73,9 @@ function etapa1(): StoryStage {
   tiles.push(...coinRow(2835, GROUND_Y - 235, 3));
   tiles.push(...coinRow(2995, GROUND_Y - 315, 4)); // corona de monedas arriba
   tiles.push(platform(3080, GROUND_Y - 180, 80)); // bajada hacia la meta
+  // Pluma (poder de vuelo) escondida como premio de exploración, flotando
+  // alto encima de la plataforma baja de la sección 4.
+  tiles.push(feather(2680, GROUND_Y - 200));
 
   tiles.push(...coinRow(180, GROUND_Y - 60, 3));
   tiles.push(...coinRow(900, GROUND_Y - 60, 3));
