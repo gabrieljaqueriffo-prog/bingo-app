@@ -74,7 +74,7 @@ const makeCard = (
 
 export default function App() {
       const [view, setView] = useState<View>(() =>
-    window.location.hash.startsWith("#brosv2") ? "brosv2" : window.location.hash.startsWith("#brosdev") ? "brosdev" : parseBrosLink() ? "bros" : parseNavalLink() ? "naval" : parseMentLink() ? "mentiroso-online" : parseStopLink() ? "stop-online" : parseRoomLink() ? "conecta4-online" : "loading",
+    window.location.hash.startsWith("#brosv2") ? "brosv2" : window.location.hash.startsWith("#brosdev") ? "brosdev" : parseBrosLink() ? "brosv2" : parseNavalLink() ? "naval" : parseMentLink() ? "mentiroso-online" : parseStopLink() ? "stop-online" : parseRoomLink() ? "conecta4-online" : "loading",
   ),
     [game, setGame] = useState<Game | null>(null),
     [games, setGames] = useState<Game[]>([]),
@@ -98,8 +98,7 @@ export default function App() {
     const onHash = () => {
       const h = window.location.hash;
       if (h.startsWith("#brosdev")) setView((v) => (v === "brosdev" ? v : "brosdev"));
-      else if (h.startsWith("#brosv2")) setView((v) => (v === "brosv2" ? v : "brosv2"));
-      else if (parseBrosLink()) setView((v) => (v === "bros" ? v : "bros"));
+      else if (parseBrosLink()) setView((v) => (v === "brosv2" ? v : "brosv2"));
     };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
