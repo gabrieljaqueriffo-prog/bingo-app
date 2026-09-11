@@ -153,6 +153,10 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
       }
       const row = await fetchBrosRoom(res.code);
       if (!row) { setError("La sala se creó, pero no se pudo leer. Revisa las políticas de Supabase."); return; }
+      // El creador es rojo: congela una línea base de tick para no RE-sincronizar
+      // sus primeros segundos hacia atrás cuando el invitado (azul) haga su
+      // primer commit con una copia vieja heredada del spawn.
+      lastRemoteRevApplied.current = row.rev;
       revRef.current = row.rev;
       setRoom(row);
       setGame(row.state);
@@ -429,8 +433,22 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
             other,
           ],
           tiles,
-          enemies: g.enemies,
-          eTick: g.eTick,
+          // Autoridad de enemigos: el anfitrión (rojo) conserva su simulación
+          // local pero adopta las MUERTES (ids que la BD ya no trae, pisados por
+          // el invitado); el invitado (azul) adopta los enemigos frescos del
+          // anfitrión pero preserva sus kills locales hasta que viajen a la BD.
+          enemies:
+            selfIdRef.current === "red"
+              ? g.enemies.filter((e) =>
+                  updated.state.enemies.some((ue) => ue.id === e.id),
+                )
+              : (updated.state.enemies ?? g.enemies).filter(
+                (ue) => !ue.dead && g.enemies.some((e) => e.id === ue.id),
+              ),
+          eTick:
+            selfIdRef.current === "red"
+              ? g.eTick
+              : (updated.state.eTick ?? g.eTick),
         } satisfies BrosGameState;
       });
     });
@@ -530,9 +548,18 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
       setGame((g) => {
         if (g.phase !== "playing" || g.winner) return g;
         const dir = keysRef.current.values().next().value ?? null;
-        let enemies = updateEnemies(g.enemies);
-        const thiefTick = tickThief(enemies, g.players);
-        enemies = thiefTick.enemies;
+        let enemies = g.enemies;
+        // El anfitrión (red) es la únic autoridad de enemigos: él los avanza con
+        // updateEnemies y los publica. El invitado (blue) NO debe re-simularlos;
+        // recibe el estado del anfitrión vía reconciliación y los conserva, para
+        // evitar que dos clientes peleen por las posiciones y los enemigos se
+        // "reseteen" en loop.
+        let thiefTick = { enemies, players: g.players };
+        if (selfIdRef.current === "red") {
+          enemies = updateEnemies(g.enemies);
+          thiefTick = tickThief(enemies, g.players);
+          enemies = thiefTick.enemies;
+        }
         const preStompEnemies = enemies;
         const eTick = g.eTick + 1;
         const coop = g.mode === "coop" || g.mode === "temple" || g.mode === "story";
@@ -899,7 +926,7 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
         }
       });
       // Enemigos dibujados bonito: caminantes, voladores, ladrón y jefe.
-      g.enemies.forEach((e: Enemy) => drawEnemy(ctx, e, g.eTick));
+      g.enemies.forEach((e: Enemy) => { if (!e.dead) drawEnemy(ctx, e, g.eTick); });
       if (g.mode === "temple") {
         const plates = g.tiles.filter((t) => t.type === "plate");
         const plateByPair = (pair: number) => plates.find((t) => t.pair === pair);

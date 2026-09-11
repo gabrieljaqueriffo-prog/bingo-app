@@ -325,6 +325,7 @@ export function drawPlayer(ctx: Ctx, p: BrosPlayer, gTick: number) {
 }
 
 export function drawEnemy(ctx: Ctx, e: Enemy, gTick: number) {
+  if (e.dead) return; // lápida online: no se dibuja (el anfitrión la barre)
   const bobY = e.flyer ? e.baseY! + Math.sin(gTick * 0.1 + e.x * 0.01) * 14 : e.y;
   const pulse = Math.sin(gTick * 0.15 + e.x) * 4;
   const w = e.w + (e.boss ? pulse * 0.2 : 0);

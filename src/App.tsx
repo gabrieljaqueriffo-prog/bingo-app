@@ -568,7 +568,7 @@ export default function App() {
           } else if (picked === "naval") {
             setView("naval");
           } else if (picked === "bros") {
-            setView("bros");
+            setView("brosv2");
           } else {
             start();
           }

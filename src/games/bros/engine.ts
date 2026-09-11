@@ -123,6 +123,7 @@ export interface Enemy {
   maxX: number;
   dir: 1 | -1;
   speed: number;
+  dead?: boolean; // enemigo pisado/localmente eliminado: el anfitrión lo barre
   boss?: boolean;
   hp?: number; // el jefe tiene vida: se lo golpea saltándole encima
   stun?: number; // ticks de invulnerabilidad tras recibir un golpe (parpadea)
@@ -481,21 +482,24 @@ export function enemiesForLevel(mode: BrosMode, level: number = 1, width: number
 
 // Avanza los enemigos un paso, rebotando entre sus límites. Determinista:
 // todos los clientes computan lo mismo a partir del estado compartido.
+// Las lápidas (`dead`) no se mueven: el anfitrión las filtra de su commit.
 export function updateEnemies(enemies: Enemy[]): Enemy[] {
-  return enemies.map((e) => {
-    let x = e.x + e.dir * e.speed;
-    let dir = e.dir;
-    if (x <= e.minX) { x = e.minX; dir = 1; }
-    if (x + e.w >= e.maxX) { x = e.maxX - e.w; dir = -1; }
-    const stun = e.stun ? e.stun - 1 : 0;
-    // Enemigos voladores: además de patrullar en horizontal, bobean en vertical.
-    if (e.flyer) {
-      const phase = (e.phase ?? 0) + 0.15;
-      const baseY = e.baseY ?? e.y;
-      return { ...e, x, dir, stun, phase, y: baseY + Math.sin(phase) * 16 };
-    }
-    return { ...e, x, dir, stun };
-  });
+  return enemies
+    .filter((e) => !e.dead)
+    .map((e) => {
+      let x = e.x + e.dir * e.speed;
+      let dir = e.dir;
+      if (x <= e.minX) { x = e.minX; dir = 1; }
+      if (x + e.w >= e.maxX) { x = e.maxX - e.w; dir = -1; }
+      const stun = e.stun ? e.stun - 1 : 0;
+      // Enemigos voladores: además de patrullar en horizontal, bobean en vertical.
+      if (e.flyer) {
+        const phase = (e.phase ?? 0) + 0.15;
+        const baseY = e.baseY ?? e.y;
+        return { ...e, x, dir, stun, phase, y: baseY + Math.sin(phase) * 16 };
+      }
+      return { ...e, x, dir, stun };
+    });
 }
 
 // Ladrón de gorros: si toca a un jugador con gorro, se lo roba y huye rápido
@@ -503,6 +507,7 @@ export function updateEnemies(enemies: Enemy[]): Enemy[] {
 export function tickThief(enemies: Enemy[], players: BrosPlayer[]): { enemies: Enemy[]; players: BrosPlayer[] } {
   const np = [...players];
   const ne = enemies.map((e) => {
+    if (e.dead) return e;
     if (!e.thief || e.hasHat || (e.stun ?? 0) > 0) return e;
     for (let i = 0; i < np.length; i++) {
       const p = np[i];
@@ -519,21 +524,24 @@ export function tickThief(enemies: Enemy[], players: BrosPlayer[]): { enemies: E
   return { enemies: ne, players: np };
 }
 
-// Si un ladrón CON gorro robado desapareció (lo estamparon), el gorro vuelve
+// Si un ladrón CON gorro robado fue pisado (lápida `dead`), el gorro vuelve
 // volando a su dueño.
 export function returnStolenHats(before: Enemy[], after: Enemy[], players: BrosPlayer[]): BrosPlayer[] {
-  const alive = new Set(after.map((e) => e.id));
-  const stolen = before.filter((e) => e.thief && e.hasHat && !alive.has(e.id));
+  const fallen = after.filter((e) => e.thief && e.hasHat && e.dead);
+  const wereAlive = new Set(before.filter((e) => e.thief && e.hasHat && !e.dead).map((e) => e.id));
+  const stolen = fallen.filter((e) => wereAlive.has(e.id));
   if (!stolen.length) return players;
   return players.map((p) =>
     stolen.some((s) => s.hasHat === p.id && p.hatLost) ? setEmote({ ...p, hatLost: false }, "🥳") : p,
   );
 }
 
-// ¿Un jugador colisiona con un enemigo? (sin contar al jefe en su стun)
+// ¿Un jugador colisiona con un enemigo? (sin contar al jefe en su стun
+// ni enemigos ya pisados)
 export function hitEnemy(p: BrosPlayer, enemies: Enemy[]): boolean {
   return enemies.some(
     (e) =>
+      !e.dead &&
       (e.stun ?? 0) <= 0 &&
       p.x < e.x + e.w && p.x + p.width > e.x &&
       p.y < e.y + e.h && p.y + p.height > e.y,
@@ -544,6 +552,10 @@ export function hitEnemy(p: BrosPlayer, enemies: Enemy[]): boolean {
 // Acepta `prevFeetY` (posición de los pies ANTES de moverse este tick) para
 // detectar el cruce del plano superior aunque el jugador "salte" la ventana
 // por caer rápido (tunneling). Devuelve enemigos actualizados y si hubo rebote.
+// KILL DETERMINISTA ONLINE: el pisado queda como `{...e, dead:true}`
+// (lápida visible para el render, sin dibujar) en vez de sacarlo de la lista,
+// así AMBOS clientes propagan la muerte en sus próximos commits y nadie la
+// "resucita" al reconciliar.
 export function stompEnemy(
   player: BrosPlayer,
   enemies: Enemy[],
@@ -553,6 +565,7 @@ export function stompEnemy(
   let coins = 0;
   const feet = player.y + player.height;
   const next = enemies.map((e) => {
+    if (e.dead) return e; // lápida: ya pisado, no golpea ni se vuelve a pisar
     if ((e.stun ?? 0) > 0) return e; // no se puede golpear mientras se recupera
     const touchX = player.x < e.x + e.w && player.x + player.width > e.x;
     const falling = player.vy > 0;
@@ -568,14 +581,14 @@ export function stompEnemy(
       bounced = true;
       if (e.boss) {
         const nhp = (e.hp ?? 1) - 1;
-        if (nhp <= 0) { coins += 3; return null; } // jefe vencido: +3 monedas
+        if (nhp <= 0) { coins += 3; return { ...e, dead: true, hp: 0 }; } // jefe vencido: +3 monedas
         return { ...e, hp: nhp, stun: 24 };
       }
       coins += 1; // enemigo normal pisado: +1 moneda
-      return null;
+      return { ...e, dead: true };
     }
     return e;
-  }).filter((e): e is Enemy => e !== null);
+  });
   return { enemies: next, bounced, coins };
 }
 

@@ -88,12 +88,19 @@ export const mergeBrosStates = (
   remote: BrosGameState,
   selfId: PlayerId,
 ): BrosGameState => ({
-  // El estado local es la simulación más fresca del mundo (enemigos, tick).
-  // Conservamos NUESTROS enemigos simulados en lugar de pisarlos con la copia
-  // vieja de la BD al sync, evitando el "reset" en loop de los enemigos.
   ...remote,
-  enemies: local.enemies,
-  eTick: local.eTick,
+  // Solo el ANFITRIÓN (rojo) simula enemigos: publica los suyos pero adopta
+  // las MUERTES de la BD (ids que el invitado pisó y ya no trae); el invitado
+  // (azul) adopta los enemigos frescos de la BD filtrando por los ids que él
+  // aún tiene vivos, para que sus pisotones viajen en su próximo commit.
+  enemies: (() => {
+    const le = local.enemies ?? [];
+    const re = remote.enemies ?? le;
+    return selfId === "red"
+      ? le.filter((e) => re.some((r) => r.id === e.id))
+      : re.filter((r) => le.some((e) => e.id === r.id));
+  })(),
+  eTick: selfId === "red" ? local.eTick : (remote.eTick ?? local.eTick),
   players: remote.players.map((rp) =>
     rp.id === selfId ? (local.players.find((p) => p.id === selfId) ?? rp) : rp,
   ),

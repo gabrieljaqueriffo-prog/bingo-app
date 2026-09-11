@@ -295,7 +295,10 @@ describe("Super Bros Engine", () => {
       const r = stompEnemy(stomper, enemies.map((e) => ({ ...e, stun: 0 })));
       enemies = r.enemies;
     }
-    expect(enemies.length).toBe(0);
+    // El pisado queda como lápida `dead` (kill determinista online), no se saca
+    // de la lista: sigue ocupando su lugar hasta que el anfitrión lo barre.
+    expect(enemies.filter((e) => !e.dead).length).toBe(0);
+    expect(enemies[0].dead).toBe(true);
   });
 
   it("should stomp via swept detection when falling fast (anti-tunneling)", () => {
@@ -306,7 +309,8 @@ describe("Super Bros Engine", () => {
     const now = { ...basePlayer, x: 305, y: 340, vy: 15 }; // pies = 388 (fuera de ventana)
     const r = stompEnemy(now, [enemy], prevFeetY);
     expect(r.bounced).toBe(true);
-    expect(r.enemies.length).toBe(0);
+    expect(r.enemies.filter((e) => !e.dead).length).toBe(0);
+    expect(r.enemies[0].dead).toBe(true);
     expect(r.coins).toBe(1);
     // Sin prevFeetY (comportamiento anterior): NO hay stomp.
     const r2 = stompEnemy(now, [{ ...enemy }]);
@@ -321,12 +325,14 @@ describe("Super Bros Engine", () => {
     const normal = { id: "e", x: 300, y: 320, w: 28, h: 40, minX: 0, maxX: 800, dir: 1, speed: 2, boss: false };
     const stomper = { ...basePlayer, x: 305, y: 290, vy: 6 };
     const rn = stompEnemy(stomper, [normal] as Enemy[]);
-    expect(rn.enemies.length).toBe(0);
+    expect(rn.enemies.filter((e) => !e.dead).length).toBe(0);
+    expect(rn.enemies[0].dead).toBe(true);
     expect(rn.coins).toBe(1);
 
     const boss = { id: "boss", x: 300, y: 300, w: 46, h: 66, minX: 0, maxX: 800, dir: 1, speed: 2, boss: true, hp: 1 };
     const rb = stompEnemy(stomper, [boss] as Enemy[]);
-    expect(rb.enemies.length).toBe(0);
+    expect(rb.enemies.filter((e) => !e.dead).length).toBe(0);
+    expect(rb.enemies[0].dead).toBe(true);
     expect(rb.coins).toBe(3);
   });
 
