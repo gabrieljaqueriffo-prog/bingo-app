@@ -351,68 +351,61 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
           !levelChanged && gMe ? gMe :
           upMe ?? gMe ?? g.players[0] ?? g.players[0];
 
-        // ── Tu jugador (local): preservar posición y velocidad para evitar
-        //    el "salto" o "regreso" cuando llega un snapshot del servidor.
-        //    Solo actualizamos estado no-físico (vidas, caged, emote, etc.).
-        const mine: BrosPlayer = levelChanged
-          ? base
-          : (
-            // Caso: la pareja hizo algo sobre ti (te cargó, te lanzó, te soltó).
-            // En ese caso, el servidor lleva la decisión y nosotros la aplicamos.
-            // PERO: nunca sobrescribimos vx/vy del jugador local excepto por impulse
-            // explícito que haya sido confirmado (lastThrow).
-            !upOther
-              ? base
-              : upOther.carrying === meId && !base.carriedBy && !base.isBubble
-                ? { ...base, carriedBy: upOther.id as PlayerId, carrying: null }
-                : !upOther.carrying && base.carriedBy === upOther.id
-                  ? { ...base, carriedBy: null }
-                  : base
-          );
-
-        // ── El otro jugador (remoto): usamos su snapshot del servidor.
-        //    Si no llega, mantenemos la versión local actual para evitar saltos.
-        const otherState = updated.state.players.find((p) => p.id !== meId);
-        let other: BrosPlayer;
-        if (g.players.find((p) => p.id !== meId)) {
-          // El rival ya existe en nuestra versión local → mezclamos estados.
-          const localOther = g.players.find((p) => p.id !== meId)!;
-          other = {
-            ...localOther,
-            ...(upOther ?? {}),
-            // Conservar posición local si el servidor no trae una reciente
-            // (evita que salte si el servidor envía snapshot viejo o (0,0)).
-            x: upOther?.x != null ? upOther.x : localOther.x,
-            y: upOther?.y != null ? upOther.y : localOther.y,
-            vx: upOther?.vx != null ? upOther.vx : localOther.vx,
-            vy: upOther?.vy != null ? upOther.vy : localOther.vy,
-          };
-        } else {
-          // Primer frame del rival → usar snapshot del servidor o fallback.
-          other = upOther ?? {
-            id: meId === "red" ? "blue" : "red",
-            x: 160,
-            y: 300,
-            vx: 0,
-            vy: 0,
-            onGround: false,
-            facing: "right",
-            lives: 3,
-            coins: 0,
-            width: 30,
-            height: 48,
-            jumped: false,
-            anim: 0,
-            coyote: 0,
-            shields: 0,
-            isBubble: false,
-            carrying: null,
-            carriedBy: null,
-            interactCd: 0,
-            emote: null,
-            emoteT: 0,
-          };
+        // ── Tu jugador (local): AUTORIDAD TOTAL de tu física. El reconciler del
+        //    canal trae la BD pero NUNCA te pisa x/y/vx/vy: tu tick local es la
+        //    fuente de verdad de tu movimiento (así no te quedás pegado ni
+        //    saltás atrás). La BD solo aporta estado no-físico (vidas, jaula,
+        //    burbuja, emotes, gorro) + decisiones del otro sobre vos
+        //    (cargar/soltar) y el impulso de lanzamiento confirmado.
+        let mine: BrosPlayer = base;
+        if (!levelChanged && upMe) {
+          const nonPhys: Partial<BrosPlayer> = {};
+          if (upMe.lives != null) nonPhys.lives = upMe.lives;
+          if (upMe.coins != null && upMe.coins > base.coins) nonPhys.coins = upMe.coins;
+          if (upMe.shields != null) nonPhys.shields = upMe.shields;
+          if (upMe.emote !== undefined) { nonPhys.emote = upMe.emote; nonPhys.emoteT = upMe.emoteT ?? base.emoteT; }
+          if (upMe.say !== undefined) nonPhys.say = upMe.say;
+          if (upMe.hatLost !== undefined) nonPhys.hatLost = upMe.hatLost;
+          if (upMe.caged !== undefined) { nonPhys.caged = upMe.caged; if (upMe.cageT != null) nonPhys.cageT = upMe.cageT; }
+          if (upMe.isBubble !== undefined) { nonPhys.isBubble = upMe.isBubble; if (upMe.bubbleT != null) nonPhys.bubbleT = upMe.bubbleT; }
+          // El otro te cargó / te soltó: los flags sí vienen de él.
+          if (upOther && upOther.carrying === meId && !base.carriedBy && !base.isBubble) {
+            nonPhys.carriedBy = upOther.id as PlayerId;
+            nonPhys.carrying = null;
+          } else if (upOther && !upOther.carrying && base.carriedBy === upOther.id) {
+            nonPhys.carriedBy = null;
+          }
+          mine = { ...base, ...nonPhys };
         }
+
+        // ── El otro jugador (remoto): SU snapshot de la BD manda para TODO
+        //    (posición, velocidad, flags). Tu copia local del rival NO manda:
+        //    el portador te mueve en su tick y el broadcast te lo dibuja suave.
+        //    Así el agarrar/cargar funciona porque el cargado obedece al otro.
+        const otherState = upOther ?? g.players.find((p) => p.id !== meId) ?? {
+          id: (meId === "red" ? "blue" : "red") as PlayerId,
+          x: 160,
+          y: 300,
+          vx: 0,
+          vy: 0,
+          onGround: false,
+          facing: "right",
+          lives: 3,
+          coins: 0,
+          width: 30,
+          height: 48,
+          jumped: false,
+          anim: 0,
+          coyote: 0,
+          shields: 0,
+          isBubble: false,
+          carrying: null,
+          carriedBy: null,
+          interactCd: 0,
+          emote: null,
+          emoteT: 0,
+        };
+        const other: BrosPlayer = { ...(otherState as BrosPlayer) };
 
         // Tiles: si yo ya recolecté algo, que no renazca aunque el servidor venga
         // con una copia vieja/exterior.
@@ -593,14 +586,19 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
               np = r.a;
             }
           } else if (np.carriedBy) {
-            // Nos están cargando: nuestra simulación obedece al portador.
-            // La posición sale del último snapshot de él (interpolado);
-            // seguimos recolectando items al vuelo pero sin física propia.
+            // Nos están cargando: obedecemos al portador con SU copia local
+            // (tick del portador), no con un snapshot viejo de red: así no
+            // quedamos pegados/colgados cuando hay latencia.
             np = { ...np, interactCd: Math.max(0, (np.interactCd ?? 0) - 1) };
-            const carrierId = np.carriedBy ?? null;
-            const cs = carrierId ? snapBufRef.current.sample(carrierId, performance.now()) : null;
-            if (cs) {
-              np = attachCarried(np, { ...np, id: np.carriedBy as PlayerId, x: cs.x, y: cs.y, width: 30, height: 48 });
+            const carrierLocal = g.players.find((q) => q.id === np.carriedBy);
+            if (carrierLocal) {
+              np = attachCarried(np, carrierLocal);
+            } else {
+              const carrierId = np.carriedBy ?? null;
+              const cs = carrierId ? snapBufRef.current.sample(carrierId, performance.now()) : null;
+              if (cs) {
+                np = attachCarried(np, { ...np, id: np.carriedBy as PlayerId, x: cs.x, y: cs.y, width: 30, height: 48 });
+              }
             }
             np = { ...np, vx: 0, vy: 0, onGround: false };
           } else {
@@ -677,18 +675,17 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
         const dirs: Partial<Record<PlayerId, number>> = {};
         for (const p of players) {
           if (p.id === selfIdRef.current) {
-            // El jugador local: si está siendo CARGADO por el otro, su movimiento
-            // proviene del otro (no de nuestras flechas). Si fue LANZADO este frame,
-            // la velocidad viene del lanzamiento, no del input. Ignoramos input local
-            // en esos casos para no chocar con la reconciliación remota.
-            const beingCarried = p.carriedBy !== null && p.carriedBy !== selfIdRef.current;
-            const justThrown = p.vy > 0 && p.vy > Math.abs(p.vx) * 2 && !p.onGround;
-            dirs[p.id] = (!beingCarried && !justThrown)
+            // Yo: mis flechas mandan (salvo que me estén cargando: ahí mi
+            // movimiento viene del portador, no de mis teclas).
+            const beingCarried = !!p.carriedBy;
+            dirs[p.id] = !beingCarried
               ? keysRef.current.has("left") ? -1 : keysRef.current.has("right") ? 1 : 0
               : 0;
           } else {
-            // El rival: usamos su vx sincronizada; si está quieto, hacia dónde mira.
-            dirs[p.id] = p.vx !== 0 ? Math.sign(p.vx) : p.facing === "left" ? -1 : p.facing === "right" ? 1 : 0;
+            // El rival NO se simula localmente para empujar cajas: su copia de
+            // la BD manda y mi render/broadcast lo mueve. Empujarlo aquí con
+            // una vx vieja lo "pegaba" contra la caja.
+            dirs[p.id] = 0;
           }
         }
         const pushed = pushCrates(hatPlayers, g.tiles, dirs);
@@ -755,6 +752,7 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
       });
     }, 1000 / 30);
     const commit = setInterval(() => {
+      if (selfIdRef.current !== "red") return; // solo el host publica el mundo
       void commitGame(room.code, gameRef.current);
     }, 250);
     return () => { clearInterval(tick); clearInterval(commit); };
