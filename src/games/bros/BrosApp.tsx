@@ -429,6 +429,12 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
             other,
           ],
           tiles,
+          // Enemigos: conservar los LOCALES (avanzados por el tick propio).
+          // `updated.state` trae los del servidor (snapshot viejo de ~250ms o de la
+          // simulación del otro cliente): sobrescribirlos aquí causaba el "loop
+          // infinito" donde los enemigos saltaban atrás/reseteaban en loop.
+          enemies: g.enemies,
+          eTick: g.eTick,
         } satisfies BrosGameState;
       });
     });
