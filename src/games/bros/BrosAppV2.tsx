@@ -48,6 +48,7 @@ import {
   type Enemy,
   type BrosGameState,
   type BrosPlayer,
+  type BrosTile,
   type Phase,
   type PlayerId,
   SCREEN_WIDTH,
@@ -407,11 +408,28 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
         };
         const other: BrosPlayer = { ...(otherState as BrosPlayer) };
 
-        // Tiles: si yo ya recolecté algo, que no renazca aunque el servidor venga
-        // con una copia vieja/exterior.
-        const tiles = updated.state.tiles.map((rt) => {
-          const lt = g.tiles.find((t) => t.type === rt.type && t.x === rt.x && t.y === rt.y);
-          return lt?.collected ? { ...rt, collected: true } : rt;
+        // Tiles: matching por índice con autoridad para tiles dinámicos:
+        // - recolectables: si yo ya lo agarré, no renace.
+        // - rejas: el latch (quedó trabada) nunca se pierde.
+        // - cajas: manda la copia de quien está EMPUJANDO (proximidad); si yo
+        //   no estoy al lado, adopto la de la BD (el otro puede estar empujando).
+        const gMeForTiles = gMe ?? g.players.find((p) => p.id === meId);
+        const nearCrate = (c: BrosTile): boolean => {
+          if (!gMeForTiles || gMeForTiles.carriedBy) return false;
+          const dx =
+            gMeForTiles.x + gMeForTiles.width < c.x ? c.x - (gMeForTiles.x + gMeForTiles.width) :
+            gMeForTiles.x > c.x + c.w ? gMeForTiles.x - (c.x + c.w) : 0;
+          const dy =
+            gMeForTiles.y + gMeForTiles.height < c.y ? c.y - (gMeForTiles.y + gMeForTiles.height) :
+            gMeForTiles.y > c.y + c.h ? gMeForTiles.y - (c.y + c.h) : 0;
+          return dx <= 14 && dy <= 20;
+        };
+        const tiles = updated.state.tiles.map((rt, i) => {
+          const lt = g.tiles[i];
+          if (!lt || lt.type !== rt.type) return rt;
+          if (rt.type === "crate") return nearCrate(lt) ? lt : rt;
+          if (rt.type === "gate") return lt.latched ? { ...rt, latched: true } : rt;
+          return lt.collected ? { ...rt, collected: true } : rt;
         });
 
         // Si nos lanzaron por DB y el broadcast se perdió, asegurar impulso.
@@ -752,7 +770,10 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
       });
     }, 1000 / 30);
     const commit = setInterval(() => {
-      if (selfIdRef.current !== "red") return; // solo el host publica el mundo
+      // AMBOS publican: el merge determina la autoridad de cada cosa (jugador:
+      // su propia física; enemigos: lápidas dead; cajas: la del que empuja;
+      // rejas: el latch; recolectables: collected). Si solo publicara el host,
+      // el empuje de caja y los pisotones del invitado nunca llegarían.
       void commitGame(room.code, gameRef.current);
     }, 250);
     return () => { clearInterval(tick); clearInterval(commit); };

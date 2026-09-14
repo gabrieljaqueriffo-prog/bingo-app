@@ -12,6 +12,7 @@ import {
   type BrosGameState,
   type BrosMode,
   type BrosPlayer,
+  type BrosTile,
   type PlayerId,
 } from "./engine";
 import { type PlayerSnapshot } from "./interpolate";
@@ -104,10 +105,34 @@ export const mergeBrosStates = (
   players: remote.players.map((rp) =>
     rp.id === selfId ? (local.players.find((p) => p.id === selfId) ?? rp) : rp,
   ),
-  tiles: remote.tiles.map((rt) => {
-    const lt = local.tiles.find((t) => t.type === rt.type && t.x === rt.x && t.y === rt.y);
-    return lt?.collected ? { ...rt, collected: true } : rt;
-  }),
+  // Tiles: matching por ÍNDICE (ambos clientes generan el mismo array desde la
+  // misma etapa) para sincronizar tiles DINÁMICOS sin perder progreso:
+  // - cajas: manda la copia de quien está EMPUJANDO (proximidad); si nadie
+  //   empuja, gana la versión de la BD (más fresca). Sin esto, cada commit
+  //   borraba el empuje → "la caja no se mueve" en online.
+  // - rejas: el latch (quedó trabada abierta) NUNCA se pierde. Sin esto la
+  //   reja se cerraba al soltar la placa → había que quedarse pisando.
+  // - recolectables: collected si cualquiera de los dos los agarró.
+  tiles: (() => {
+    const me = local.players.find((p) => p.id === selfId);
+    const nearCrate = (c: BrosTile): boolean => {
+      if (!me || me.carriedBy) return false;
+      const dx =
+        me.x + me.width < c.x ? c.x - (me.x + me.width) :
+        me.x > c.x + c.w ? me.x - (c.x + c.w) : 0;
+      const dy =
+        me.y + me.height < c.y ? c.y - (me.y + me.height) :
+        me.y > c.y + c.h ? me.y - (c.y + c.h) : 0;
+      return dx <= 14 && dy <= 20;
+    };
+    return remote.tiles.map((rt, i) => {
+      const lt = local.tiles[i];
+      if (!lt || lt.type !== rt.type) return rt;
+      if (rt.type === "crate") return nearCrate(lt) ? { ...lt } : rt;
+      if (rt.type === "gate") return lt.latched ? { ...rt, latched: true } : rt;
+      return lt.collected ? { ...rt, collected: true } : rt;
+    });
+  })(),
   winner: local.winner ?? remote.winner,
   phase: local.phase === "finished" || remote.phase === "finished" ? "finished" : remote.phase,
   // El lanzamiento más nuevo gana (cada lado puede haberlo generado o recibido).
