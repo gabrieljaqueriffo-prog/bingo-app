@@ -105,7 +105,7 @@ function etapa1(): StoryStage {
   return {
     id: "juntos",
     name: "Juntos al inicio",
-    intro: "4 zonas: calentamiento → CAJA a la placa 2P → escalada con monedas de premio → doble reja (ida y vuelta) → ¡cuidado con el LADRÓN antes de la meta!",
+    intro: "4 zonas: calentamiento → empujá la CAJA (← →) hasta la placa y párense los dos encima: la reja queda trabada abierta → escalada con monedas de premio → doble reja (ida y vuelta) → ¡cuidado con el LADRÓN antes de la meta!",
     width,
     tiles,
     enemies,

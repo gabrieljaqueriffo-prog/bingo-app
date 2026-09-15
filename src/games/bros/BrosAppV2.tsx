@@ -864,6 +864,22 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
         ctx.textAlign = "center";
         ctx.fillText("META", flag.x + flag.w / 2, flag.y - 8);
       }
+      // Ayuda visual del puzzle: si la caja todavía no está sobre su placa,
+      // se lo decimos con un cartelito (es la mecánica central de la zona).
+      const plates = g.tiles.filter((t) => t.type === "plate");
+      g.tiles.filter((t) => t.type === "crate").forEach((cr) => {
+        const onPlate = plates.some(
+          (pl) => pl.pair === 1 && cr.x + cr.w > pl.x - 8 && cr.x < pl.x + pl.w + 8,
+        );
+        if (onPlate) return;
+        const bob = Math.sin(g.eTick * 0.12) * 3;
+        ctx.font = "10px monospace";
+        ctx.textAlign = "center";
+        ctx.fillStyle = "rgba(0,0,0,.45)";
+        ctx.fillText("← → EMPUJÁ", cr.x + cr.w / 2 + 1, cr.y - 12 + bob + 1);
+        ctx.fillStyle = "#ffe066";
+        ctx.fillText("← → EMPUJÁ", cr.x + cr.w / 2, cr.y - 12 + bob);
+      });
       // Jugadores: interpolamos al rival (para suavizar latencia) y colocamos
       // sobre la cabeza al que esté siendo llevado.
       const now = performance.now();
@@ -1096,11 +1112,11 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
   );
 
   if (!room) {
-    console.log("🎮 Super Bros v2.0609d — lobby cargado");
+    console.log("🎮 Super Bros v2.0915a — lobby cargado");
     return (
       <div className="bros-lobby" style={{ background: "linear-gradient(135deg, #ff006e, #8338ec, #3a86ff)", minHeight: "100vh" }}>
         <div style={{ background: "#ffbe0b", color: "#000", padding: "14px 24px", fontSize: "20px", fontWeight: "bold", textAlign: "center", borderBottom: "4px solid #ff006e", letterSpacing: "1px" }}>
-          🎮 VERSIÓN NUEVA v2.0609d — CON CAJA Y JULIA 🎮
+          🎮 v2.0915a — CAJA EMPUJABLE ONLINE + REJAS QUE SE QUEDAN ABIERTAS 🎮
         </div>
         <h2 style={{ color: "#fff", textShadow: "2px 2px 0 #000" }}>Super Bros</h2>
         <p>¡El mundo co-op de plataformas! Etapas diseñadas a mano donde se
@@ -1169,6 +1185,7 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
       <header className="bros-topbar">
         <span className="bros-code">{room.code}</span>
         <span className="bros-you">{selfId === "red" ? "🔴 Vos: Rojo" : "🔵 Vos: Azul"}</span>
+        <span style={{ fontSize: "10px", opacity: 0.65, marginLeft: "auto", marginRight: "8px" }}>v2.0915a</span>
         <div className="bros-topbar-actions">
           <button
             className="bros-btn small"
