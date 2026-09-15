@@ -864,21 +864,23 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
         ctx.textAlign = "center";
         ctx.fillText("META", flag.x + flag.w / 2, flag.y - 8);
       }
-      // Ayuda visual del puzzle: si la caja todavía no está sobre su placa,
-      // se lo decimos con un cartelito (es la mecánica central de la zona).
+      // Ayuda del puzzle (enseña la mecánica sin manual): caja lejos de la placa
+      // → "empujá"; caja ya sobre la placa y reja sin trabar → "párense encima".
       const plates = g.tiles.filter((t) => t.type === "plate");
+      const gateLatched = g.tiles.some((t) => t.type === "gate" && t.pair === 1 && t.latched);
       g.tiles.filter((t) => t.type === "crate").forEach((cr) => {
-        const onPlate = plates.some(
-          (pl) => pl.pair === 1 && cr.x + cr.w > pl.x - 8 && cr.x < pl.x + pl.w + 8,
-        );
-        if (onPlate) return;
-        const bob = Math.sin(g.eTick * 0.12) * 3;
+        const plate = plates.find((pl) => pl.pair === 1);
+        const onPlate = !!plate && cr.x + cr.w > plate.x - 8 && cr.x < plate.x + plate.w + 8;
+        const label = onPlate ? (gateLatched ? "" : "¡PÁRENSE ENCIMA!") : "← → EMPUJÁ";
+        if (!label) return;
+        const lx = onPlate && plate ? plate.x + plate.w / 2 : cr.x + cr.w / 2;
+        const ly = (onPlate && plate ? plate.y : cr.y) - 12 + Math.sin(g.eTick * 0.12) * 3;
         ctx.font = "10px monospace";
         ctx.textAlign = "center";
         ctx.fillStyle = "rgba(0,0,0,.45)";
-        ctx.fillText("← → EMPUJÁ", cr.x + cr.w / 2 + 1, cr.y - 12 + bob + 1);
+        ctx.fillText(label, lx + 1, ly + 1);
         ctx.fillStyle = "#ffe066";
-        ctx.fillText("← → EMPUJÁ", cr.x + cr.w / 2, cr.y - 12 + bob);
+        ctx.fillText(label, lx, ly);
       });
       // Jugadores: interpolamos al rival (para suavizar latencia) y colocamos
       // sobre la cabeza al que esté siendo llevado.

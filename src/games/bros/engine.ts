@@ -806,8 +806,8 @@ export function pushCrates(
       // (hasta 14px de contacto) para que funcione aunque el empujón venga de
       // un frame con el jugador apenas separado por la resolución de colisión.
       const touchingX = d > 0
-        ? p.x + p.width >= c.x - 4 && p.x + p.width <= c.x + 14
-        : p.x <= c.x + c.w + 4 && p.x >= c.x + c.w - 14;
+        ? p.x + p.width >= c.x - 8 && p.x + p.width <= c.x + 14
+        : p.x <= c.x + c.w + 8 && p.x >= c.x + c.w - 14;
       const touchingY = p.y + p.height > c.y + 4 && p.y < c.y + c.h - 4;
       if (!touchingX || !touchingY) continue;
       const nx = c.x + d * PUSH_SPEED;
