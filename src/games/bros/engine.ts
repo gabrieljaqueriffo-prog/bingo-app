@@ -68,6 +68,7 @@ export interface BrosTile {
   pair?: number; // une placa (o palanca) y compuerta en el modo cooperación
   both?: boolean; // placa doble: requiere el peso de ambos jugadores a la vez
   latched?: boolean; // reja: quedó abierta de forma permanente (latch)
+  pushedBy?: PlayerId | null; // caja: quién la está empujando ESTE frame (autoridad online)
 }
 
 export type Phase = "lobby" | "playing" | "finished";
@@ -799,6 +800,12 @@ export function pushCrates(
   const np = players.map((p) => ({ ...p }));
   for (const c of nt) {
     if (c.type !== "crate") continue;
+    // Autoridad online: se recalcula CADA frame. Si nadie la mueve este
+    // frame (soltó la tecla, dejó de tocarla, está bloqueada), se limpia acá
+    // y recién más abajo se vuelve a marcar si alguien la empuja de verdad.
+    // Así el merge de red sabe distinguir "la estoy empujando ahora" de "solo
+    // estoy parado al lado" (antes se confundían y la caja rebotaba online).
+    c.pushedBy = null;
     for (const p of np) {
       const d = dirs[p.id] ?? 0;
       if (d === 0 || (!p.onGround && (p.coyote ?? 0) <= 0) || p.carriedBy) continue;
@@ -824,6 +831,7 @@ export function pushCrates(
       );
       if (blocked) continue;
             c.x = nx;
+      c.pushedBy = p.id;
       // El empujador queda pegado al borde de la caja.
       const i = np.findIndex((q) => q.id === p.id);
       np[i] = d > 0 ? { ...np[i], x: c.x - p.width } : { ...np[i], x: c.x + c.w };

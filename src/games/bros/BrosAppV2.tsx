@@ -411,23 +411,15 @@ export default function BrosApp({ onExit }: { onExit: () => void }) {
         // Tiles: matching por índice con autoridad para tiles dinámicos:
         // - recolectables: si yo ya lo agarré, no renace.
         // - rejas: el latch (quedó trabada) nunca se pierde.
-        // - cajas: manda la copia de quien está EMPUJANDO (proximidad); si yo
-        //   no estoy al lado, adopto la de la BD (el otro puede estar empujando).
-        const gMeForTiles = gMe ?? g.players.find((p) => p.id === meId);
-        const nearCrate = (c: BrosTile): boolean => {
-          if (!gMeForTiles || gMeForTiles.carriedBy) return false;
-          const dx =
-            gMeForTiles.x + gMeForTiles.width < c.x ? c.x - (gMeForTiles.x + gMeForTiles.width) :
-            gMeForTiles.x > c.x + c.w ? gMeForTiles.x - (c.x + c.w) : 0;
-          const dy =
-            gMeForTiles.y + gMeForTiles.height < c.y ? c.y - (gMeForTiles.y + gMeForTiles.height) :
-            gMeForTiles.y > c.y + c.h ? gMeForTiles.y - (c.y + c.h) : 0;
-          return dx <= 14 && dy <= 20;
-        };
+        // - cajas: manda quien la está empujando ESTE frame (lt.pushedBy, lo
+        //   marca pushCrates en cada tick local), no quien está simplemente
+        //   parado cerca. Con proximidad sola, el otro jugador parado al lado
+        //   "ganaba" la autoridad y reescribía hacia atrás el empuje: la caja
+        //   se movía un poco y volvía a su lugar.
         const tiles = updated.state.tiles.map((rt, i) => {
           const lt = g.tiles[i];
           if (!lt || lt.type !== rt.type) return rt;
-          if (rt.type === "crate") return nearCrate(lt) ? lt : rt;
+          if (rt.type === "crate") return lt.pushedBy === meId ? lt : rt;
           if (rt.type === "gate") return lt.latched ? { ...rt, latched: true } : rt;
           return lt.collected ? { ...rt, collected: true } : rt;
         });

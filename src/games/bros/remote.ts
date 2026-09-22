@@ -12,7 +12,6 @@ import {
   type BrosGameState,
   type BrosMode,
   type BrosPlayer,
-  type BrosTile,
   type PlayerId,
 } from "./engine";
 import { type PlayerSnapshot } from "./interpolate";
@@ -114,21 +113,15 @@ export const mergeBrosStates = (
   //   reja se cerraba al soltar la placa → había que quedarse pisando.
   // - recolectables: collected si cualquiera de los dos los agarró.
   tiles: (() => {
-    const me = local.players.find((p) => p.id === selfId);
-    const nearCrate = (c: BrosTile): boolean => {
-      if (!me || me.carriedBy) return false;
-      const dx =
-        me.x + me.width < c.x ? c.x - (me.x + me.width) :
-        me.x > c.x + c.w ? me.x - (c.x + c.w) : 0;
-      const dy =
-        me.y + me.height < c.y ? c.y - (me.y + me.height) :
-        me.y > c.y + c.h ? me.y - (c.y + c.h) : 0;
-      return dx <= 14 && dy <= 20;
-    };
     return remote.tiles.map((rt, i) => {
       const lt = local.tiles[i];
       if (!lt || lt.type !== rt.type) return rt;
-      if (rt.type === "crate") return nearCrate(lt) ? { ...lt } : rt;
+      // Cajas: manda quien la está empujando ESTE frame (lt.pushedBy, marcado
+      // por pushCrates en cada tick), no quien está simplemente parado cerca.
+      // La proximidad sola hacía que un jugador quieto "al lado" ganara la
+      // autoridad y reescribiera hacia atrás el empuje del otro → la caja se
+      // movía un poco y volvía a su lugar en el próximo commit.
+      if (rt.type === "crate") return lt.pushedBy === selfId ? { ...lt } : rt;
       if (rt.type === "gate") return lt.latched ? { ...rt, latched: true } : rt;
       return lt.collected ? { ...rt, collected: true } : rt;
     });

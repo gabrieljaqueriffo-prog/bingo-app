@@ -30,19 +30,13 @@ import "./stages";
 const crateOf = (tiles: BrosTile[]): BrosTile => tiles.find((t) => t.type === "crate")!;
 
 // Reconciliación de tiles idéntica a la de BrosAppV2 (por índice + autoridad
-// del empujador para las cajas + latch pegado para las rejas).
+// de EMPUJE ACTIVO para las cajas -pushedBy, no proximidad- + latch pegado
+// para las rejas).
 const reconcileTiles = (local: BrosGameState, db: BrosGameState, meId: "red" | "blue"): BrosTile[] => {
-  const me = local.players.find((p) => p.id === meId);
-  const nearCrate = (c: BrosTile): boolean => {
-    if (!me || me.carriedBy) return false;
-    const dx = me.x + me.width < c.x ? c.x - (me.x + me.width) : me.x > c.x + c.w ? me.x - (c.x + c.w) : 0;
-    const dy = me.y + me.height < c.y ? c.y - (me.y + me.height) : me.y > c.y + c.h ? me.y - (c.y + c.h) : 0;
-    return dx <= 14 && dy <= 20;
-  };
   return db.tiles.map((rt, i) => {
     const lt = local.tiles[i];
     if (!lt || lt.type !== rt.type) return rt;
-    if (rt.type === "crate") return nearCrate(lt) ? lt : rt;
+    if (rt.type === "crate") return lt.pushedBy === meId ? lt : rt;
     if (rt.type === "gate") return lt.latched ? { ...rt, latched: true } : rt;
     return lt.collected ? { ...rt, collected: true } : rt;
   });
@@ -113,6 +107,31 @@ describe("sincronización online de la caja y la reja", () => {
     expect(redCrate).toBeGreaterThan(spawn); // se movió de verdad
     expect(dbCrate).toBe(redCrate); // viajó a la BD
     expect(blueSees).toBe(redCrate); // y el rival lo ve igual
+  });
+
+  it("el rival parado al lado (sin empujar) NO le gana la autoridad al que empuja (fix rebote)", () => {
+    // Bug: antes la autoridad era por PROXIMIDAD. Si el rival estaba cerca de
+    // la caja sin empujarla, su commit (con la caja quieta en su copia local)
+    // pisaba el avance del que sí empuja → la caja se movía un poco y volvía.
+    const start = createInitialGameState("story");
+    const spawn = crateOf(start.tiles).x;
+    let red: BrosGameState = standAt({ ...start, tiles: start.tiles.map((t) => ({ ...t })) }, "red", spawn - 60, GROUND_Y - 48);
+    // El azul está parado tocando la caja del otro lado, pero nunca empuja.
+    let blue: BrosGameState = standAt({ ...start, tiles: start.tiles.map((t) => ({ ...t })) }, "blue", spawn + 40, GROUND_Y - 48);
+    let db: BrosGameState = { ...start, tiles: start.tiles.map((t) => ({ ...t })) };
+
+    for (let frame = 0; frame < 120; frame++) {
+      red = tickOne(red, "red", 1); // rojo empuja
+      blue = tickOne(blue, "blue", 0); // azul solo está parado ahí
+      if (frame % 8 === 0) {
+        db = mergeBrosStates(red, db, "red"); // commit del que empuja
+        db = mergeBrosStates(blue, db, "blue"); // commit del que está parado (no debe pisar)
+        red.tiles = reconcileTiles(red, db, "red");
+        blue.tiles = reconcileTiles(blue, db, "blue");
+      }
+    }
+    expect(crateOf(red.tiles).x).toBeGreaterThan(spawn);
+    expect(crateOf(db.tiles).x).toBe(crateOf(red.tiles).x);
   });
 
   it("la reja NO se cierra: el latch sobrevive el merge (nadie queda encerrado)", () => {
